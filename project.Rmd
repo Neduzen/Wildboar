@@ -11,137 +11,41 @@ library(dplyr)
 library(lubridate)
 library(ggplot2)
 library(tmap)
-library(raster)
-library(stars)
+library(sp)
 
-wildschwein_BE <- read_delim("wildschwein_BE_2056.csv",",") %>%
-  st_as_sf(coords = c("E", "N"), crs = 2056, remove = FALSE)
-feldaufnahmen <- read_sf("Feldaufnahmen_Fanel.gpkg")
-vegetationshoehe <- terra::rast("vegetationshoehe_LFI.tif")
-
-wildschwein_summer <- wildschwein_BE %>% filter(month(DatetimeUTC) == 5 | month(DatetimeUTC) == 6)
-
-ggplot() +
-  geom_sf(data = feldaufnahmen, aes(fill = Frucht)) +
-  geom_sf(data= wildschwein_summer, aes(fill=TierName))
-
-wildschwein_summer <- wildschwein_summer %>% st_join(feldaufnahmen)
-
-ggplot() +
-  geom_sf(data= wildschwein_summer, aes(color=Frucht)) 
-
-wildschwein_summer <- wildschwein_summer %>% mutate(hour = hour(DatetimeUTC), Frucht=ifelse(is.na(Frucht), "Else", Frucht))
-wildschwein_summer
-
-wildschwein_sum <- wildschwein_summer %>% st_drop_geometry() %>% 
-  group_by(hour, Frucht, TierID) %>% count() %>% mutate(n = ifelse(n<10, 0, n))%>% ungroup() %>% 
-  group_by(hour, TierID) %>% mutate(percentage= n/sum(n)*100)
-wildschwein_sum
-
-ggplot(wildschwein_sum) + 
-  geom_area(stat = "bin") + 
-  geom_area(aes(x=percentage, y=hour, fill = Frucht), stat ="bin", alpha=0.6) 
-
-p1 <- ggplot(wildschwein_sum %>% filter(percentage>0 & TierID=="016A"), aes(x = hour, y = percentage)) +
-  geom_bar(stat="identity", width=.5, aes(fill=Frucht))
-p2 <- ggplot(wildschwein_sum %>% filter(percentage>0 & TierID=="018A"), aes(x = hour, y = percentage)) +
-  geom_bar(stat="identity", width=.5, aes(fill=Frucht))
-p3 <- ggplot(wildschwein_sum %>% filter(percentage>0 & TierID=="002A"), aes(x = hour, y = percentage)) +
-  geom_bar(stat="identity", width=.5, aes(fill=Frucht))
-
-
-wildschwein_sum <- wildschwein_summer %>% group_by(hour, Frucht, TierID) %>% summarise(amount = n())
-wildschwein_sum %>% filter(hour==1) %>% sum(sum)
-
-
-tm_shape(vegetationshoehe) + 
-  tm_raster("vegetationshoehe_LFI", title = "Global Land Cover")
-
-extract
-wildschwein_summer %>% ungroup()
-wildschwein_raster <- terra::extract(vegetationshoehe, cbind(wildschwein_summer$E, wildschwein_summer$N))#raster::extract(vegetationshoehe, wildschwein_summer$geometry)
-wildschwein_raster
-wildschwein_summer$Vegetationshoehe <- wildschwein_raster
-
-ggplot(wildschwein_summer %>% filter(TierID=="002A"), aes(x = DatetimeUTC, y = Vegetationshoehe$vegetationshoehe_LFI)) 
-```
-
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-
-wildschwein_BE <- read_delim("data/wildschwein_BE_all_raw.csv",",") %>%
-  st_as_sf(coords = c("X", "Y"), crs = 2056, remove = FALSE)
-
-ggplot(data=wildschwein_BE, aes(x = X, y = Y)) +
-  geom_point(aes(color=Tier)) +
-geom_sf(data=schreckagenda)
-
-schreckagenda <- read_delim("data/schreckagenda_2014-2017.csv",",") #%>% st_as_sf(coords = c("E_dec", "N_dec"), crs = CRS("+init=epsg:4326"), remove = FALSE)  #%>% st_transform(crs = 2056) #%>% st_set_crs(4326) %>% st_transform(3857)
-st_crs(schreckagenda) = 4326
-schreckagenda_ch <- schreckagenda %>% st_transform(crs = 2056) 
-
-schreckagenda
-ggplot(schreckagenda, aes(x = E, y = N)) +
-  geom_point(aes(color=ID))
-ggplot()+
-geom_sf(data=schreckagenda)
-
-ggplot() +
-  geom_point(data=wildschwein_BE, aes(x = Long, y = Lat, color=Tier)) +
-geom_point(data=schreckagenda %>% filter(E_dec < 47.1 & E_dec > 46.9 & N_dec < 7.2), aes(x=N_dec, y=E_dec))+
-  xlim(7.095, 7.105) + ylim(46.982, 46.99)
-
-wildschwein_BE %>%group_by(Tier) %>% summarise(Firstdate=min(DatumUTC), lastdate=max(DatumUTC))
-
-ggplot() +
-  geom_point(data=wildschwein_BE %>% filter(Tier=="002_Sabi_12275"), aes(x = X, y = Y))
-
-
-
-```
-
-Load data
-```{r cars}
 
 devtools::install_github("ComputationalMovementAnalysis/ComputationalMovementAnalysisData")
 library(ComputationalMovementAnalysisData)
-library(ggplot2)
-library(sp)
+```
 
+
+# show data
+```{r cars}
 head(wildschwein_BE)
 head(wildschwein_metadata)
 head(wildschwein_overlap_temp)
 head(schreck_agenda)
 head(schreck_locations)
+```
 
 # Schreck prepare
-schreck_locations_ch <- schreck_locations %>% st_as_sf(coords = c("N", "E"), crs = CRS("+init=epsg:4326"), remove = FALSE)  #%>% st_transform(crs = 2056)
+```{r }
+schreck_locations_ch <- schreck_locations %>% st_as_sf(coords = c("lon", "lat"), crs = CRS("+init=epsg:4326"), remove = FALSE)  #%>% st_transform(crs = 2056)
 schreck_locations_ch <- schreck_locations_ch %>% st_transform(crs = 2056)
-schreck_locations_ch <- schreck_locations_ch %>% filter(E < 47.2 & N < 7.5)
-schreck_locations_ch$coords <- schreck_locations_ch %>% st_coordinates()
+schreck_locations_ch <- schreck_locations_ch %>% filter(lat < 47.2 & lon < 7.5)
 coordsne <- unlist(st_geometry(schreck_locations_ch)) %>% matrix(ncol=2,byrow=TRUE) %>% as_tibble() %>% setNames(c("N","E"))
-schreck_locations_ch$X <- coordsne$E
-schreck_locations_ch$Y <- coordsne$N
 schreck_locations_ch$N <- coordsne$E
 schreck_locations_ch$E <- coordsne$N
-
+#join 
 schreck_locations_ch <- schreck_locations_ch %>% left_join(schreck_agenda, by=c("id"="id"))
+```
 
+# Get common data, show examples
+```{r }
 # Get common samples
-sabi <- wildschwein_BE %>% filter(TierName=="Sabi")
+head(wildschwein_BE)
+head(schreck_locations_ch)
+sabi <- wildschwein_BE %>% filter(TierName=="Sabine")
 sabi <- sabi %>% filter(hour(DatetimeUTC)< 7 | hour(DatetimeUTC) > 19) # only night gps
 
 s1 <- schreck_locations_ch[5,]
@@ -157,24 +61,24 @@ ggplot() +
 
 # Get example 1
 wildboar_closeup <- wildschwein_BE %>% 
-  filter(TierName=="Sabi" & DatetimeUTC > as_datetime('2015-06-09 22:30:43') & DatetimeUTC < as_datetime('2015-06-10 14:30:43')) %>% 
+  filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-09 22:30:43') & DatetimeUTC < as_datetime('2015-06-10 14:30:43')) %>% 
   mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60)
 ggplot() +
-  geom_line(data=wildboar_closeup, aes(x=E, y=N, color=time0)) +
+  geom_path(data=wildboar_closeup, aes(x=E, y=N, color=time0)) +
   geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) 
 # Get example 2
 wildboar_closeup1 <- wildschwein_BE %>% 
-  filter(TierName=="Sabi" & DatetimeUTC > as_datetime('2015-06-08 18:30:43') & DatetimeUTC < as_datetime('2015-06-09 14:30:43')) %>% 
+  filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-08 18:30:43') & DatetimeUTC < as_datetime('2015-06-09 14:30:43')) %>% 
   mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
 ggplot() +
-  geom_line(data=wildboar_closeup1, aes(x=E, y=N, color=time0)) +
+  geom_path(data=wildboar_closeup1, aes(x=E, y=N, color=time0)) +
   geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) 
 # Get example 2
 wildboar_closeup2 <- wildschwein_BE %>% 
-  filter(TierName=="Sabi" & DatetimeUTC > as_datetime('2015-06-07 18:30:43') & DatetimeUTC < as_datetime('2015-06-08 14:30:43')) %>% 
+  filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-07 18:30:43') & DatetimeUTC < as_datetime('2015-06-08 14:30:43')) %>% 
   mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
 ggplot() +
-  geom_line(data=wildboar_closeup2, aes(x=E, y=N, color=time0)) +
+  geom_path(data=wildboar_closeup2, aes(x=E, y=N, color=time0)) +
   geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) 
 
 # Plot
