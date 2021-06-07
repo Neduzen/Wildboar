@@ -56,7 +56,7 @@ sabi <- sabi %>% mutate(trip = ifelse(hour(DatetimeUTC) > 16, day(DatetimeUTC)+1
 
 
 ggplot() +
-  geom_path(data=sabi %>%  filter(trip<11), aes(x=E, y=N, color=factor(day))) +
+  geom_path(data=sabi %>%  filter(trip<11), aes(x=E, y=N, color=factor(trip))) +
   geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) 
 
 # Get example 1
