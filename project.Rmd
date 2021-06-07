@@ -52,11 +52,11 @@ s1 <- schreck_locations_ch[5,]
 sabi <- sabi %>% filter(DatetimeUTC > first(s1$datum_on) & DatetimeUTC < first(s1$datum_off))
 sabi <- sabi %>% mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2))
 sabi <- sabi %>% filter(dist < 400)
-sabi <- sabi %>% mutate(day = day(DatetimeUTC))
+sabi <- sabi %>% mutate(trip = ifelse(hour(DatetimeUTC) > 16, day(DatetimeUTC)+1, day(DatetimeUTC)))
 
 
 ggplot() +
-  geom_line(data=sabi, aes(x=E, y=N, color=factor(day))) +
+  geom_path(data=sabi %>%  filter(trip<11), aes(x=E, y=N, color=factor(day))) +
   geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) 
 
 # Get example 1
