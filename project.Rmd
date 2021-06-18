@@ -195,3 +195,60 @@ head(data.frame(w1))
 table(w1$closest_schreck)
 
 # If it's complete, let it run once and then save it
+```
+
+Wildschewinschreck
+```{r}
+# calculate properties of scarce (approaching rate, speed)
+wildboar_closeup <- wildschwein_BE %>% 
+  filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-08 18:30:43') & DatetimeUTC < as_datetime('2015-06-09 10:30:43')) %>% 
+  mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
+
+schreck_orientation <- s1 %>% mutate(length=lautstaerke*lautstaerke/100)
+rad2deg <- function(rad) {(rad * 180) / (pi)}
+deg2rad <- function(deg) {(deg * pi) / (180)}
+
+schreck_orientation$asurichtung_mean <- (schreck_orientation$ausrichtung_max-
+                                           schreck_orientation$ausrichtung_min) / 2 +
+                                        schreck_orientation$ausrichtung_min
+schreck_orientation$ausrichung_meanE = schreck_orientation$E[1] + schreck_orientation$length[1] * 2*
+  cos(deg2rad(360-270-(schreck_orientation$asurichtung_mean[1])))
+schreck_orientation$ausrichung_meanN = schreck_orientation$N[1] + schreck_orientation$length[1] *2* 
+  sin(deg2rad(360-270-(schreck_orientation$asurichtung_mean[1])))
+
+#Dirinst = atan2(-Uinst,-Vinst) * DperR
+#Dirgeo = Dirinst + Vaz
+
+schreck_orientation$ausrichung_minE = schreck_orientation$E[1] + schreck_orientation$length[1] * 
+  cos(deg2rad(360-270-schreck_orientation$ausrichtung_min[1]))
+schreck_orientation$ausrichung_minN = schreck_orientation$N[1] + schreck_orientation$length[1] * 
+  sin(deg2rad(360-270-schreck_orientation$ausrichtung_min[1]))
+schreck_orientation$ausrichung_maxE = schreck_orientation$E[1] + schreck_orientation$length[1] * 
+  cos(deg2rad(360-270-schreck_orientation$ausrichtung_max[1]))
+schreck_orientation$ausrichung_maxN = schreck_orientation$N[1] + schreck_orientation$length[1] * 
+  sin(deg2rad(360-270-schreck_orientation$ausrichtung_max[1]))
+
+
+x_coord <- c(schreck_orientation$E[1],  schreck_orientation$ausrichung_minE[1],
+             schreck_orientation$ausrichung_meanE[1],
+             schreck_orientation$ausrichung_maxE[1], schreck_orientation$E[1])
+y_coord <- c(schreck_orientation$N[1], schreck_orientation$ausrichung_minN[1],
+             schreck_orientation$ausrichung_meanN[1],
+             schreck_orientation$ausrichung_maxN[1], schreck_orientation$N[1])
+p = Polygon(cbind(x_coord, y_coord))
+ps = Polygons(list(p),1)
+sps = SpatialPolygons(list(ps))
+plot(sps)
+#schreck_orientation$polygon[1] = sps[1]
+poly <- st_polygon(list(matrix(c(x_coord, y_coord),ncol=2, byrow=FALSE))) #%>% st_geometry(poly) %>% st_set_crs(2056)
+pos <- data.frame(x=x_coord, y=y_coord, id=c(1,2,3,4,5))
+#schreck_orientation$polygon <- poly 
+                                                                        
+
+ggplot() +
+  geom_path(data=wildboar_closeup, aes(x=E, y=N, color=time0)) +
+  geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
+  geom_point(data = schreck_orientation, aes(x=ausrichung_meanE, y=ausrichung_meanN), 
+             colour="brown", size=2) +
+  geom_polygon(data=pos, aes(x=x, y = y, fill="orange", alpha=0.4))
+```
