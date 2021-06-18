@@ -103,40 +103,40 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 # Adding closest active schreck (+ distance) to each observation
 ```{r }
 ### data
-w<-wildschwein_BE  ## i bin zful immr dia ewig langa nama tippa
+w<-wildschwein_BE  
 sl<-schreck_locations
 
 ###
-s<-data.frame(schreck_locations_ch) ## I had to transform it to a data frame, otherwise something was weird about his coordinates, there was always geomtry attached to them
+s<-data.frame(schreck_locations_ch) ## I had to transform it to a data frame, otherwise something was weird about the coordinates (geometry)
 ###
-
-## crate new subset of s that has only one line per location (will be used during loop)
 
 s1<-s[!duplicated(s$id),c("id","N","E")] # list with all Schrecks and their location
 
-####### add closest schreck to each wild boar location
+
 ## reduce data to certain time frame
 w1<-w %>% 
   filter (day!="Tag"&!is.na(day))
 nrow(w1)
-
 
 time<-Sys.time()
 #for(j in 1:nrow(w1)){ # loop for each unique observation
 for(j in 1:10000){ 
 ### look only at Schrecks that were active on that day
   s_on<-s[s$datum_on < w1[j,]$DatetimeUTC & s$datum_off > w1[j,]$DatetimeUTC,]
-if(nrow(s_on)==0){w1[j,"closest_schreck"]<-"no_Schreck_on"}  else{
+if(nrow(s_on)==0){w1[j,"closest_schreck"]<-"no_Schreck_on"}  else{     
  for(i in 1:nrow(s_on)){ ## calculate difference between current observation (j) and each schreck location
- s_on[i,"diff"]<-sqrt((w1[j,"N"]-s_on[i,"N"])^2+(w1[j,"E"]-s_on[i,"E"])^2)} ## add difference of current observation to location into location file
-#### look at the distance of the closest Schreck, only use it if less than 200m
+ s_on[i,"diff"]<-sqrt((w1[j,"N"]-s_on[i,"N"])^2+(w1[j,"E"]-s_on[i,"E"])^2)} ## add difference of current observation to location into file
+#### look at the distance of the closest Schreck, only use it if less than 400m
   if(min(s_on$diff)>400){w1[j,"closest_schreck"]<-"no_Schreck_witin_400m"} else{
-w1[j,"closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"id"]
+w1[j,"closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"id"]  ## add closest schreck to each wild boar location
 w1[j,"distance_to_closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"diff"]
 }}}
 time-Sys.time()
 ## 
 
+## crate new subset of s that has only one line per location (will be used during loop)
+
 head(data.frame(w1))
 table(w1$closest_schreck)
-# EINMAL lAUFEN LASSEN UND DANN SPEICHERN
+
+# If it's complete, let it run once and then save it
