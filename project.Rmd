@@ -40,6 +40,8 @@ schreck_locations_ch$N <- coordsne$E
 schreck_locations_ch$E <- coordsne$N
 #join 
 schreck_locations_ch <- schreck_locations_ch %>% left_join(schreck_agenda, by=c("id"="id"))
+schreck_locations_ch$wid <- c(1:25)
+schreck_locations_ch <- schreck_locations_ch %>% mutate(wid=as.character(wid))
 ```
 
 # Get common data, show examples
@@ -114,24 +116,34 @@ s<-data.frame(schreck_locations_ch) ## I had to transform it to a data frame, ot
 
 s1<-s[!duplicated(s$id),c("id","N","E")] # list with all Schrecks and their location
 
+# Set id to w
+w <- w %>% mutate(id = row_number())
 
 ## reduce data to certain time frame
 w1<-w %>% 
-  filter (day!="Tag"&!is.na(day))
+  filter (day!="Tag"&!is.na(day) &
+            ((DatetimeUTC > as.Date("2014-05-01") & DatetimeUTC < as.Date("2014-07-04")) | 
+                (DatetimeUTC > as.Date("2015-05-20") & DatetimeUTC < as.Date("2015-07-01")) |
+                 (DatetimeUTC > as.Date("2016-04-04") & DatetimeUTC < as.Date("2016-10-04")) |
+                 (DatetimeUTC > as.Date("2017-04-26") & DatetimeUTC < as.Date("2017-11-18"))))
 nrow(w1)
 
 time<-Sys.time()
 #for(j in 1:nrow(w1)){ # loop for each unique observation
-for(j in 1:10000){ 
+for(j in 1:5000){ 
 ### look only at Schrecks that were active on that day
   s_on<-s[s$datum_on < w1[j,]$DatetimeUTC & s$datum_off > w1[j,]$DatetimeUTC,]
-if(nrow(s_on)==0){w1[j,"closest_schreck"]<-"no_Schreck_on"}  else{     
- for(i in 1:nrow(s_on)){ ## calculate difference between current observation (j) and each schreck location
- s_on[i,"diff"]<-sqrt((w1[j,"N"]-s_on[i,"N"])^2+(w1[j,"E"]-s_on[i,"E"])^2)} ## add difference of current observation to location into file
+  if(nrow(s_on)==0)
+    {w1[j,"closest_schreck"]<-"no_Schreck_on"}  
+  else{     
+    for(i in 1:nrow(s_on)){ ## calculate difference between current observation (j) and each schreck location
+      s_on[i,"diff"]<-sqrt((w1[j,"N"]-s_on[i,"N"])^2+(w1[j,"E"]-s_on[i,"E"])^2)} ## add difference of current observation to location into file
 #### look at the distance of the closest Schreck, only use it if less than 400m
-  if(min(s_on$diff)>400){w1[j,"closest_schreck"]<-"no_Schreck_witin_400m"} else{
-w1[j,"closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"id"]  ## add closest schreck to each wild boar location
-w1[j,"distance_to_closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"diff"]
+  if(min(s_on$diff)>400){
+      w1[j,"closest_schreck"]<-"no_Schreck_witin_400m"} 
+  else{
+      w1[j,"closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"wid"]  ## add closest schreck to each wild boar location
+      w1[j,"distance_to_closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"diff"]
 }}}
 time-Sys.time()
 ## 
@@ -142,6 +154,13 @@ head(data.frame(w1))
 table(w1$closest_schreck)
 
 # If it's complete, let it run once and then save it
+
+# Merge close wildschweinschreck gps  data to origin wildboar
+w <- w %>% left_join(w1 %>% dplyr::select(id, closest_schreck, distance_to_closest_schreck), by="id")
+w <- w %>% mutate(closest_schreck= 
+  ifelse(is.na(closest_schreck), "no_Schreck_witin_400m", closest_schreck))
+# Extract trip
+#w <- w %>% mutate(trip = )
 ```
 
 # Wildschewinschreck
@@ -179,10 +198,10 @@ x_coord <- c(schreck_orientation$E[1],  schreck_orientation$ausrichung_minE[1],
 y_coord <- c(schreck_orientation$N[1], schreck_orientation$ausrichung_minN[1],
              schreck_orientation$ausrichung_meanN[1],
              schreck_orientation$ausrichung_maxN[1], schreck_orientation$N[1])
-p = Polygon(cbind(x_coord, y_coord))
-ps = Polygons(list(p),1)
-sps = SpatialPolygons(list(ps))
-plot(sps)
+#p = Polygon(cbind(x_coord, y_coord))
+#ps = Polygons(list(p),1)
+#sps = SpatialPolygons(list(ps))
+#plot(sps)
 #schreck_orientation$polygon[1] = sps[1]
 poly <- st_polygon(list(matrix(c(x_coord, y_coord),ncol=2, byrow=FALSE))) #%>% st_geometry(poly) %>% st_set_crs(2056)
 pos <- data.frame(x=x_coord, y=y_coord, id=c(1,2,3,4,5))
