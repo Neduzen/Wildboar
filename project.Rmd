@@ -120,7 +120,7 @@ nrow(w1)
 
 time<-Sys.time()
 #for(j in 1:nrow(w1)){ # loop for each unique observation
-for(j in 1:10000){ 
+for(j in 1:100){ 
 ### look only at Schrecks that were active on that day
   s_on<-s[s$datum_on < w1[j,]$DatetimeUTC & s$datum_off > w1[j,]$DatetimeUTC,]
 if(nrow(s_on)==0){w1[j,"closest_schreck"]<-"no_Schreck_on"}  else{     
