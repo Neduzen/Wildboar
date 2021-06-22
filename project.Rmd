@@ -13,6 +13,8 @@ library(ggplot2)
 library(tmap)
 library(sp)
 library(devtools)
+install.packages("trajr")
+library(trajr)
 
 install.packages("devtools")
 
@@ -165,7 +167,6 @@ w <- w %>% mutate(closest_schreck=
 
 # Wildschewinschreck
 ```{r}
-# calculate properties of scarce (approaching rate, speed)
 wildboar_closeup <- wildschwein_BE %>% 
   filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-08 18:30:43') & DatetimeUTC < as_datetime('2015-06-09 10:30:43')) %>% 
   mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
@@ -215,3 +216,77 @@ ggplot() +
              colour="brown", size=2) +
   geom_polygon(data=pos, aes(x=x, y = y, fill="orange", alpha=0.4))
 ```
+
+# Wilddboar scare effect properties
+```{r}
+# calculate properties of scarce (approaching rate, speed)
+s1 <- schreck_locations_ch[5,]
+wildboar_trip <- wildschwein_BE %>% 
+  filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-08 18:30:43') & 
+           DatetimeUTC < as_datetime('2015-06-09 10:30:43')) %>% 
+  mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
+  mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
+
+
+
+# Calculate approaching rate
+wildboar_trip <- wildboar_trip %>%  mutate(approachingRate = lag(dist)/dist,
+                                           approachingRate2 = lag(dist)-dist)
+
+# Calculate speed
+wildboar_trip <- wildboar_trip %>%  mutate(speed = round(
+                                      ((E- lag(E))^2 + (N-lag(N))^2)^0.5 
+                                      / 15 / 60, 4))
+
+# Relative trajectory
+wildboar_trip <- wildboar_trip %>% mutate(x=E-s1$E, y=N-s1$N)
+coords <- data.frame(x = wildboar_trip$x, 
+                     y = wildboar_trip$y, 
+                     times = wildboar_trip$time0)
+# Set all sinousitiy to 0
+wildboar_trip$sinousity = replicate(length(coords$x), NA)
+for (i in 3:(length(coords$x)-2)) {
+  # Create a trajectory from the coordinates
+  trj <- TrajFromCoords(coords[(i-2):(i+1),])
+  # Rescale stepsize
+  trj_re <- TrajRediscretize(trj, 1)
+  # Calculate sinousity
+  wildboar_trip$sinousity[i] = TrajSinuosity(trj_re, compass.direction = TRUE) %>% round(digits = 4)
+}
+
+wildboar_trip <- wildboar_trip %>% mutate(scareEffect=-normalize(approachingRate2)
+                                          +normalize(speed)-normalize(sinousity),
+                                          isScared = scareEffect > 7.5,
+                                          scared = lead(isScared))
+
+
+ggplot(data=wildboar_trip) +
+  geom_line( aes(x=time0, y=normalize(approachingRate)), color="green")+
+  geom_line( aes(x=time0, y=normalize(approachingRate2)), color="orange")+
+  geom_line( aes(x=time0, y=normalize(speed)), color="red")+
+  geom_line( aes(x=time0, y=normalize(sinousity)), color="purple")+
+  geom_line( aes(x=time0, y=scareEffect), color="black") 
+
+ggplot() +
+  geom_path(data=wildboar_trip, aes(x=E, y=N, color=approachingRate2)) +
+  geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
+  geom_point(data = wildboar_trip %>% filter(scared | isScared), aes(x=E, y=N), color="red")
+
+ggplot() +
+  geom_path(data=wildboar_trip, aes(x=E, y=N, color=approachingRate)) +
+  geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
+  geom_point(data = wildboar_trip %>% filter(scared | isScared), aes(x=E, y=N), color="red")
+
+ggplot() +
+  geom_path(data=wildboar_trip, aes(x=E, y=N, color=speed)) +
+  geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
+  geom_point(data = wildboar_trip %>% filter(scared | isScared), aes(x=E, y=N), color="red")
+
+ggplot() +
+  geom_path(data=wildboar_trip, aes(x=E, y=N, color=sinousity)) +
+  geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
+  geom_point(data = wildboar_trip %>% filter(scared | isScared), aes(x=E, y=N), color="red")
+```
+
+
+
