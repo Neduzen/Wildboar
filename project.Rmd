@@ -13,15 +13,13 @@ library(ggplot2)
 library(tmap)
 library(sp)
 library(devtools)
-<<<<<<< HEAD
-install.packages("trajr")
+library(som)
+#install.packages("trajr")
 library(trajr)
 
-install.packages("devtools")
-=======
-library(ComputationalMovementAnalysisData)
 #install.packages("devtools")
->>>>>>> 48d63ea7799b1610ddf7429f20a6e756a4724b91
+
+library(ComputationalMovementAnalysisData)
 
 devtools::install_github("ComputationalMovementAnalysis/ComputationalMovementAnalysisData")
 
@@ -114,7 +112,10 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 # Adding closest active schreck (+ distance) to each observation
 ```{r }
 ### data
-w<-wildschwein_BE  
+w<-wildschwein_BE %>% mutate(date = as.Date(DatetimeUTC), 
+                             time= format(DatetimeUTC, format = "%H:%M:%S"),
+                             hour= as.integer(format(DatetimeUTC, format = "%H"))+
+                               as.integer(format(DatetimeUTC, format = "%M"))/60)
 sl<-schreck_locations
 
 ###
@@ -156,12 +157,22 @@ nrow(w1)
 #write.csv(w1, "wildboar_loop.csv")
 
 w1 <- read_delim("wildboar_loop.csv",",")
+w1 <- w1 %>% mutate(hour= as.integer(format(DatetimeUTC, format = "%H")),
+                tripdate= ifelse(hour < 12, as.Date(DatetimeUTC)-1, as.Date(DatetimeUTC)),
+                tripdate2 = as.Date(tripdate, origin="1970-01-01"))
 
 # Merge close wildschweinschreck gps  data to origin wildboar
 w <- w %>% left_join(w1 %>% dplyr::select(id, closest_schreck, distance_to_closest_schreck), by="id")
 w <- w %>% mutate(closest_schreck= 
   ifelse(is.na(closest_schreck), "no_Schreck_witin_400m", closest_schreck))
 
+#add tripdate
+w <- w %>% mutate(hour= as.integer(format(DatetimeUTC, format = "%H")),
+                tripdate= ifelse(hour < 12, as.Date(DatetimeUTC)-1, as.Date(DatetimeUTC)),
+                tripdate2 = as.Date(tripdate, origin="1970-01-01"))
+
+
+w %>% dplyr::select(DatetimeUTC, tripdate2)
 ```
 
 # Separation of the wildboar trips
@@ -174,32 +185,7 @@ w <- w %>% mutate(closest_schreck=
 w1$Date <- as.Date(w1$DatetimeUTC)
 ## order data frame by animal and time
 w1<-w1[order(w1$TierName) & order(w1$DatetimeUTC),]
-## empty column for trip id
-w$tripID<-"NA"
-w$start<-"no"
-animals<-unique(w$TierName)
 
-for(j in 1:length(animals)){
-  days<-unique(w1[w1$TierName==animals[j],]$Date) 
-  if(length(days)!=0){
-  for(i in 1:length(days)){
-    n<-w1[w1$TierName==animals[j] & w1$Date==days[i]& w1$day=="Abenddaemmerung",]
-    n<-n[1,]
-    if(nrow(n)!=0 & !is.na(n$TierID)){
-    w[w$TierName==animals[j] & (w$DatetimeUTC >= n$DatetimeUTC-2*60*60) & (w$DatetimeUTC <= n$DatetimeUTC+2*60*60),"tripID"]<-paste(animals[j],i, sep="_")
-    w[w$TierName==animals[j] & w$DatetimeUTC==n$DatetimeUTC,"start"]<-"yes"
-    }}}}
-
-## correct NA again
-w[w$tripID=="NA","tripID"]<-NA
-table(w$tripID)
-
-data.frame(w[w$tripID=="Ueli_85",])
-
-### new data frame with only those trips that are at least one point within 400m of schreck (active)
-trip_start <-w[!is.na(w$tripID) & w$closest_schreck!="no_Schreck_on" & w$closest_schreck!="no_Schreck_witin_400m",]
-
-trips<-unique(trip_start$tripID)
 #
 
 ##### Create trips: with shorest distance to schreck (each day) ########################################
@@ -215,10 +201,10 @@ w$tripID_dist<-"NA"
 w$start_dist<-"no"
 animals<-unique(w1$TierName)
 for(j in 1:length(animals)){
-  days<-unique(w1[w1$TierName==animals[j] & !is.na(w1$TierName),]$Date) 
+  days<-unique(w1[w1$TierName==animals[j] & !is.na(w1$TierName),]$tripdate2) 
   if(length(days)!=0){
     for(i in 1:length(days)){
-      n<-w1[w1$TierName==animals[j] & w1$Date==days[i],]
+      n<-w1[w1$TierName==animals[j] & w1$tripdate2==days[i],]
       if(nrow(n[!is.na(n$distance_to_closest_schreck),])==0){nmin<-NA} else{
       nmin<-min(n$distance_to_closest_schreck,na.rm=T)}
       if(!is.na(nmin)){ ## only continue if nmin is not NA
@@ -228,8 +214,13 @@ for(j in 1:length(animals)){
         w[w$TierName==animals[j] & w$DatetimeUTC==n$DatetimeUTC,"start_dist"]<-"yes"
       }}}}}
 
+
+w <- w %>% group_by(TierID, tripdate2) %>% mutate(isTrip= max(tripID_dist) != 'NA',
+                                          tripIDnight = ifelse((hour < 9.1 | hour >= 17.9)&isTrip,
+                                                              max(tripID_dist), NA)) %>% ungroup()
+
 ### list of all trips based on closest distance per day and two hours before and after
-trips_dist<-unique(w$tripID_dist)
+trips_dist<-unique(w$tripIDnight)
 
 head(trips_dist)
 
@@ -237,6 +228,8 @@ head(trips_dist)
 
 # Wildschewinschreck
 ```{r}
+s1 <- schreck_locations_ch[5,]
+
 wildboar_closeup <- wildschwein_BE %>% 
   filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-08 18:30:43') & DatetimeUTC < as_datetime('2015-06-09 10:30:43')) %>% 
   mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
@@ -291,13 +284,15 @@ ggplot() +
 ```{r}
 # calculate properties of scarce (approaching rate, speed)
 s1 <- schreck_locations_ch[5,]
-wildboar_trip <- wildschwein_BE %>% 
-  filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-08 18:30:43') & 
-           DatetimeUTC < as_datetime('2015-06-09 10:30:43')) %>% 
+#wildboar_trip <- wildschwein_BE %>% 
+#  filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-08 19:30:43') & 
+ #          DatetimeUTC < as_datetime('2015-06-09 08:30:43')) %>% 
+#  mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
+ # mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
+wildboar_trip <- w %>% filter(tripIDnight=="Olga_6") %>% ungroup() %>% 
   mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
   mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
-
-
+s1 <- schreck_locations_ch %>%  filter(id == max(wildboar_trip$closest_schreck))
 
 # Calculate approaching rate
 wildboar_trip <- wildboar_trip %>%  mutate(approachingRate = lag(dist)/dist,
@@ -308,7 +303,7 @@ wildboar_trip <- wildboar_trip %>%  mutate(speed = round(
                                       ((E- lag(E))^2 + (N-lag(N))^2)^0.5 
                                       / 15 / 60, 4))
 
-# Relative trajectory
+# Relative coordinates (trajectory)
 wildboar_trip <- wildboar_trip %>% mutate(x=E-s1$E, y=N-s1$N)
 coords <- data.frame(x = wildboar_trip$x, 
                      y = wildboar_trip$y, 
@@ -336,6 +331,11 @@ ggplot(data=wildboar_trip) +
   geom_line( aes(x=time0, y=normalize(speed)), color="red")+
   geom_line( aes(x=time0, y=normalize(sinousity)), color="purple")+
   geom_line( aes(x=time0, y=scareEffect), color="black") 
+
+ggplot() +
+  geom_path(data=wildboar_trip, aes(x=E, y=N, color=time0)) +
+  geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
+  geom_point(data = wildboar_trip %>% filter(scared | isScared), aes(x=E, y=N), color="red")
 
 ggplot() +
   geom_path(data=wildboar_trip, aes(x=E, y=N, color=approachingRate2)) +
