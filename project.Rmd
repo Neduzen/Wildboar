@@ -13,13 +13,18 @@ library(ggplot2)
 library(tmap)
 library(sp)
 library(devtools)
+<<<<<<< HEAD
 install.packages("trajr")
 library(trajr)
 
 install.packages("devtools")
+=======
+library(ComputationalMovementAnalysisData)
+#install.packages("devtools")
+>>>>>>> 48d63ea7799b1610ddf7429f20a6e756a4724b91
 
 devtools::install_github("ComputationalMovementAnalysis/ComputationalMovementAnalysisData")
-library(ComputationalMovementAnalysisData)
+
 ```
 
 
@@ -130,39 +135,104 @@ w1<-w %>%
                  (DatetimeUTC > as.Date("2017-04-26") & DatetimeUTC < as.Date("2017-11-18"))))
 nrow(w1)
 
-time<-Sys.time()
-#for(j in 1:nrow(w1)){ # loop for each unique observation
-for(j in 1:5000){ 
+
+#for(j in 1:nrow(w1)){
 ### look only at Schrecks that were active on that day
-  s_on<-s[s$datum_on < w1[j,]$DatetimeUTC & s$datum_off > w1[j,]$DatetimeUTC,]
-  if(nrow(s_on)==0)
-    {w1[j,"closest_schreck"]<-"no_Schreck_on"}  
-  else{     
-    for(i in 1:nrow(s_on)){ ## calculate difference between current observation (j) and each schreck location
-      s_on[i,"diff"]<-sqrt((w1[j,"N"]-s_on[i,"N"])^2+(w1[j,"E"]-s_on[i,"E"])^2)} ## add difference of current observation to location into file
+ # s_on<-s[s$datum_on < w1[j,]$DatetimeUTC & s$datum_off > w1[j,]$DatetimeUTC,]
+  #if(nrow(s_on)==0)
+   # {w1[j,"closest_schreck"]<-"no_Schreck_on"}  
+  #else{     
+    #for(i in 1:nrow(s_on)){ ## calculate difference between current observation (j) and each schreck location
+      #s_on[i,"diff"]<-sqrt((w1[j,"N"]-s_on[i,"N"])^2+(w1[j,"E"]-s_on[i,"E"])^2)} ## add difference of current observation to location into file
 #### look at the distance of the closest Schreck, only use it if less than 400m
-  if(min(s_on$diff)>400){
-      w1[j,"closest_schreck"]<-"no_Schreck_witin_400m"} 
-  else{
-      w1[j,"closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"wid"]  ## add closest schreck to each wild boar location
-      w1[j,"distance_to_closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"diff"]
-}}}
-time-Sys.time()
-## 
+  #if(min(s_on$diff)>400){
+      #w1[j,"closest_schreck"]<-"no_Schreck_witin_400m"} 
+  #else{
+      #w1[j,"closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"id"]  ## add closest schreck to each wild boar location
+      #w1[j,"distance_to_closest_schreck"]<-s_on[s_on$diff==min(s_on$diff),"diff"]
+#}}}
 
-## crate new subset of s that has only one line per location (will be used during loop)
+# Save data.frame to spare time
+#write.csv(w1, "wildboar_loop.csv")
 
-head(data.frame(w1))
-table(w1$closest_schreck)
-
-# If it's complete, let it run once and then save it
+w1 <- read_delim("wildboar_loop.csv",",")
 
 # Merge close wildschweinschreck gps  data to origin wildboar
 w <- w %>% left_join(w1 %>% dplyr::select(id, closest_schreck, distance_to_closest_schreck), by="id")
 w <- w %>% mutate(closest_schreck= 
   ifelse(is.na(closest_schreck), "no_Schreck_witin_400m", closest_schreck))
-# Extract trip
-#w <- w %>% mutate(trip = )
+
+```
+
+# Separation of the wildboar trips
+```{r }
+
+####### create trips: two hour before and two hours after first observation at "Abenddaemmerung" (i.e. presumed start of Schrecks)
+#####
+
+# split time and day in separate columns:
+w1$Date <- as.Date(w1$DatetimeUTC)
+## order data frame by animal and time
+w1<-w1[order(w1$TierName) & order(w1$DatetimeUTC),]
+## empty column for trip id
+w$tripID<-"NA"
+w$start<-"no"
+animals<-unique(w$TierName)
+
+for(j in 1:length(animals)){
+  days<-unique(w1[w1$TierName==animals[j],]$Date) 
+  if(length(days)!=0){
+  for(i in 1:length(days)){
+    n<-w1[w1$TierName==animals[j] & w1$Date==days[i]& w1$day=="Abenddaemmerung",]
+    n<-n[1,]
+    if(nrow(n)!=0 & !is.na(n$TierID)){
+    w[w$TierName==animals[j] & (w$DatetimeUTC >= n$DatetimeUTC-2*60*60) & (w$DatetimeUTC <= n$DatetimeUTC+2*60*60),"tripID"]<-paste(animals[j],i, sep="_")
+    w[w$TierName==animals[j] & w$DatetimeUTC==n$DatetimeUTC,"start"]<-"yes"
+    }}}}
+
+## correct NA again
+w[w$tripID=="NA","tripID"]<-NA
+table(w$tripID)
+
+data.frame(w[w$tripID=="Ueli_85",])
+
+### new data frame with only those trips that are at least one point within 400m of schreck (active)
+trip_start <-w[!is.na(w$tripID) & w$closest_schreck!="no_Schreck_on" & w$closest_schreck!="no_Schreck_witin_400m",]
+
+trips<-unique(trip_start$tripID)
+#
+
+##### Create trips: with shorest distance to schreck (each day) ########################################
+
+# split time and day in separate columns:
+w1$Date <- as.Date(w1$DatetimeUTC)
+
+## order data frame by animal and time
+w1<-w1[order(w1$TierName) & order(w1$DatetimeUTC),]
+
+## empty column for trip id
+w$tripID_dist<-"NA"
+w$start_dist<-"no"
+animals<-unique(w1$TierName)
+for(j in 1:length(animals)){
+  days<-unique(w1[w1$TierName==animals[j] & !is.na(w1$TierName),]$Date) 
+  if(length(days)!=0){
+    for(i in 1:length(days)){
+      n<-w1[w1$TierName==animals[j] & w1$Date==days[i],]
+      if(nrow(n[!is.na(n$distance_to_closest_schreck),])==0){nmin<-NA} else{
+      nmin<-min(n$distance_to_closest_schreck,na.rm=T)}
+      if(!is.na(nmin)){ ## only continue if nmin is not NA
+        if(nmin<=400){ ## only continue if minimal distance to schreck is less than 400m
+      n<-n[n$distance_to_closest_schreck==nmin & !is.na(n$distance_to_closest_schreck),]
+        w[w$TierName==animals[j] & (w$DatetimeUTC >= n$DatetimeUTC-2*60*60) & (w$DatetimeUTC <= n$DatetimeUTC+2*60*60),"tripID_dist"]<-paste(animals[j],i, sep="_")
+        w[w$TierName==animals[j] & w$DatetimeUTC==n$DatetimeUTC,"start_dist"]<-"yes"
+      }}}}}
+
+### list of all trips based on closest distance per day and two hours before and after
+trips_dist<-unique(w$tripID_dist)
+
+head(trips_dist)
+
 ```
 
 # Wildschewinschreck
@@ -290,3 +360,8 @@ ggplot() +
 
 
 
+=======
+
+
+```
+>>>>>>> 48d63ea7799b1610ddf7429f20a6e756a4724b91
