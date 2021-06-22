@@ -195,9 +195,8 @@ w_start <-w[!is.na(w$tripID) & w$closest_schreck!="no_Schreck_on" & w$closest_sc
 trips<-unique(ww$tripID)
 #
 
-######################## with shorest distance
-####### create trips: two hour before and two hours after first observation at "Abenddaemmerung" (i.e. presumed start of Schrecks)
-#####
+##### Create trips: with shorest distance to schreck (each day) ########################################
+
 # split time and day in separate columns:
 w1$Date <- as.Date(w1$DatetimeUTC)
 
