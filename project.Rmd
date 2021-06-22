@@ -190,9 +190,9 @@ table(w$tripID)
 data.frame(w[w$tripID=="Ueli_85",])
 
 ### new data frame with only those trips that are at least one point within 400m of schreck (active)
-w_start <-w[!is.na(w$tripID) & w$closest_schreck!="no_Schreck_on" & w$closest_schreck!="no_Schreck_witin_400m",]
+trip_start <-w[!is.na(w$tripID) & w$closest_schreck!="no_Schreck_on" & w$closest_schreck!="no_Schreck_witin_400m",]
 
-trips<-unique(ww$tripID)
+trips<-unique(trip_start$tripID)
 #
 
 ##### Create trips: with shorest distance to schreck (each day) ########################################
@@ -202,6 +202,7 @@ w1$Date <- as.Date(w1$DatetimeUTC)
 
 ## order data frame by animal and time
 w1<-w1[order(w1$TierName) & order(w1$DatetimeUTC),]
+
 ## empty column for trip id
 w$tripID_dist<-"NA"
 w$start_dist<-"no"
