@@ -282,6 +282,10 @@ ggplot() +
 
 # Wilddboar scare effect properties
 ```{r}
+# Get all trips
+trips <- w %>% filter(!is.na(tripIDnight)) %>% group_by(tripIDnight)
+
+
 # calculate properties of scarce (approaching rate, speed)
 s1 <- schreck_locations_ch[5,]
 #wildboar_trip <- wildschwein_BE %>% 
@@ -292,6 +296,17 @@ s1 <- schreck_locations_ch[5,]
 wildboar_trip <- w %>% filter(tripIDnight=="Olga_6") %>% ungroup() %>% 
   mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
   mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
+
+wildboar_trip_scared <- data.frame(matrix(ncol = 11, nrow = 0))
+x <- c("id", "scareEffect", "time0", "approachingRate2", "speed", "sinousity", "dist", "x", "y", "closest_schreck", "scared")
+colnames(wildboar_trip_scared) <- x
+
+for (i in 1:length(unique(trips$tripIDnight)))
+{
+  wildboar_trip <- trips %>% filter(tripIDnight==unique(trips$tripIDnight)[i])  %>% 
+  mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
+  mutate(time0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,time0)
+  
 s1 <- schreck_locations_ch %>%  filter(id == max(wildboar_trip$closest_schreck))
 
 # Calculate approaching rate
@@ -323,7 +338,13 @@ wildboar_trip <- wildboar_trip %>% mutate(scareEffect=-normalize(approachingRate
                                           +normalize(speed)-normalize(sinousity),
                                           isScared = scareEffect > 7.5,
                                           scared = lead(isScared))
-
+wildboar_trip_scared <- wildboar_trip_scared %>% 
+  rbind(wildboar_trip %>% 
+          dplyr::select(id, scareEffect, time0, approachingRate2, speed, sinousity, dist, x, y, closest_schreck, scared))
+}
+head(wildboar_trip_scared)
+wildboar_scared <- wildboar_trip_scared %>% filter(scared)
+w <- w %>% left_join(wildboar_trip_scared %>% dplyr::select(id, scareEffect, time0, approachingRate2, speed, sinousity, dist, x, y, scared),by="id")
 
 ggplot(data=wildboar_trip) +
   geom_line( aes(x=time0, y=normalize(approachingRate)), color="green")+
