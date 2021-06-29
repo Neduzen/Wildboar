@@ -297,25 +297,35 @@ wildboar_trip <- w %>% filter(tripIDnight=="Olga_6") %>% ungroup() %>%
   mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
   mutate(triptime0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,triptime0)
 
-wildboar_trip_scared <- data.frame(matrix(ncol = 21, nrow = 0))
+wildboar_trip_scared <- data.frame(matrix(ncol = 22, nrow = 0))
 x <- c("id", "scareEffect", "triptime0", "approachingRate", "approachingRateRelative",
-       "approachingRateAbsolute", "speed", "sinousity", "acceleration", "acceleration4", 
-       "dist", "E", "N","x", "y", 
+       "approachingRateAbsolute", "speed", "sinousity", "sinousityPre", "acceleration", "speedDiff3", 
+       "dist","E", "N","x", "y", 
        "closest_schreck", "scared",  "tripIDnight", "DatetimeUTC", "hour", "day")
 colnames(wildboar_trip_scared) <- x
 
-for (i in 1:length(unique(trips$tripIDnight)))
+# Line distance function
+dist2d <- function(a,b,c) 
 {
-  wildboar_trip <- trips %>% filter(tripIDnight==unique(trips$tripIDnight)[i])  %>% 
-  mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
-  mutate(triptime0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60,
-         triptimeDiff = (triptime0-lag(triptime0))*60,
-         distanceAbsolute = ((E- lag(E))^2 + (N-lag(N))^2)^0.5) %>% arrange(.,triptime0)
+ v1 <- b - c
+ v2 <- a - b
+ m <- cbind(v1,v2)
+ d <- abs(det(m))/sqrt(sum(v1*v1))
+} 
+
+for (u in 1:length(unique(trips$tripIDnight)))
+{
+  wildboar_trip <- trips %>% filter(tripIDnight==unique(trips$tripIDnight)[u])
   
   # Only take full trips
   if (length(wildboar_trip$TierID) > 61)
   {
     s1 <- schreck_locations_ch %>%  filter(id == max(wildboar_trip$closest_schreck))
+    wildboar_trip <- wildboar_trip %>% 
+      mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
+      mutate(triptime0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60,
+         triptimeDiff = (triptime0-lag(triptime0))*60,
+         distanceAbsolute = ((E- lag(E))^2 + (N-lag(N))^2)^0.5) %>% arrange(.,triptime0)
     
     # Calculate approaching rate
     wildboar_trip <- wildboar_trip %>%  mutate(approachingRate = lag(dist)-dist,
@@ -323,93 +333,178 @@ for (i in 1:length(unique(trips$tripIDnight)))
                                                  approachingRate / (triptimeDiff),
                                                approachingRateRelative = 
                                                  approachingRate / (distanceAbsolute))
-    
-    # Calculate speed
+    # Calculate speed & acceleration
     wildboar_trip <- wildboar_trip %>%
       mutate(speed = round(distanceAbsolute / triptimeDiff, 4),
-             acceleration = round((speed - lag(speed)) / triptimeDiff, 4),
-             acceleration4 = round(((speed+lead(speed))/2 - (lag(speed)+lag(speed, 2)/2)) / triptimeDiff, 4))
-    
+             acceleration = round((lead(speed)-speed)  * 60 / lead(triptimeDiff), 4),
+             speedDiff3 = round(((speed+lead(speed)+lead(speed, 2))/3 - 
+                                      (lag(speed)+lag(speed, 2)+lag(speed, 3)/3)), 4))
+
     # Relative coordinates (trajectory)
-    wildboar_trip <- wildboar_trip %>% mutate(x=E-s1$E, y=N-s1$N)
+    wildboar_trip <- wildboar_trip %>% mutate(x=E-first(s1$E), y=N-first(s1$N))
     coords <- data.frame(x = wildboar_trip$x, 
                          y = wildboar_trip$y, 
                          times = wildboar_trip$triptime0)
     # Set all sinousitiy to 0
     wildboar_trip$sinousity = replicate(length(coords$x), NA)
-    for (i in 3:(length(coords$x)-2)) {
+    wildboar_trip$sinousityPre = replicate(length(coords$x), NA)
+    for (i in 1:(length(coords$x))) {
       # Create a trajectory from the coordinates
-      trj <- TrajFromCoords(coords[(i-2):(i+1),])
-      # Rescale stepsize
-      trj_re <- TrajRediscretize(trj, 1)
-      # Calculate sinousity
-      wildboar_trip$sinousity[i] = TrajSinuosity(trj_re, compass.direction = TRUE) %>% round(digits = 4)
+      if (i < length(coords$x)-3)
+      {
+        trj <- TrajFromCoords(coords[(i):(i+3),])
+        # Rescale stepsize
+        trj_re <- TrajRediscretize(trj, 1)
+        # Calculate sinousity
+        wildboar_trip$sinousity[i] = TrajSinuosity(trj_re, compass.direction = TRUE) %>% 
+          round(digits = 4)
+      }
+      if (i > 3)
+      {
+        trj2 <- TrajFromCoords(coords[(i-3):(i),])
+        trj_re2 <- TrajRediscretize(trj2, 1)
+        wildboar_trip$sinousityPre[i] = TrajSinuosity(trj_re2, compass.direction = TRUE) %>% 
+          round(digits = 4)
+      }
     }
     
-    wildboar_trip <- wildboar_trip %>% mutate(sinousity= ifelse(is.na(sinousity), 0, sinousity),
-                                              scareEffect= - normalize(approachingRateAbsolute)
-                                              + normalize(acceleration4) - normalize(sinousity),
+    # Get proximity of movement
+    #schreckPoint <- c(s1$E,s1$N)
+    wildboar_trip <- wildboar_trip %>%
+     mutate(linedist = ((x^2+y^2)^0.5 + ((x-lag(x))^2+(y-lag(y))^2)^0.5)/2)
+    #ifelse(is.na(lag(x)) | is.na(x), NA, 
+     #                         dist2d(c(0, 0), c(E,N), c(lag(E), lag(N)))))
+    #((x^2+y^2)^0.5 + ((x-lag(x))^2+(y-lag(y))^2)^0.5)/2)
+              
+    
+    # Calculate scareEffect and classify scare
+    wildboar_trip <- wildboar_trip %>% mutate(sinousity = ifelse(is.na(sinousity), max(sinousity), sinousity),
+                                              scareEffect = - normalize(approachingRateAbsolute)
+                                              + normalize(acceleration) - normalize(sinousity),
                                               isScared = scareEffect > 6.5,
                                               scared = lead(isScared))
     wildboar_trip_scared <- wildboar_trip_scared %>% 
       rbind(wildboar_trip %>% 
               dplyr::select(id, scareEffect, triptime0, approachingRate, approachingRateRelative,
-                            approachingRateAbsolute, speed, sinousity, acceleration, acceleration4, dist, 
-                            E, N, x, y, closest_schreck, scared, tripIDnight, DatetimeUTC, hour, day))
+                            approachingRateAbsolute, speed, sinousity, sinousityPre, acceleration, 
+                            speedDiff3, dist, E, N, x, y, closest_schreck, scared, tripIDnight, 
+                            DatetimeUTC, 
+                            hour, day))
   }
 }
 head(wildboar_trip_scared)
-wildboar_scared <- wildboar_trip_scared %>% filter(scared)
+# Scaled values
+wildboar_trip_scared <- wildboar_trip_scared %>% group_by(tripIDnight) %>% 
+  mutate(
+    approachingRateAbsoluteS = (approachingRateAbsolute-min(approachingRateAbsolute, na.rm = TRUE)) /
+      (max(approachingRateAbsolute, na.rm = TRUE)- min(approachingRateAbsolute, na.rm = TRUE)),
+    approachingRateRelativeS = (approachingRateRelative-min(approachingRateRelative, na.rm = TRUE)) /
+      (max(approachingRateRelative, na.rm = TRUE)- min(approachingRateRelative, na.rm = TRUE)),
+    accelerationS = (acceleration-min(acceleration, na.rm = TRUE))/
+                     (max(acceleration, na.rm = TRUE) - min(acceleration, na.rm = TRUE)),
+    sinousityS = (sinousity-min(sinousity, na.rm = TRUE))/
+                     (max(sinousity, na.rm = TRUE)- min(sinousity, na.rm = TRUE)),
+    sinousityDiff = sinousity - sinousityPre,
+    sinousityDiffS = (sinousityDiff - min(sinousityDiff, na.rm=TRUE)) / 
+                        (max(sinousityDiff, na.rm = TRUE)- min(sinousityDiff, na.rm = TRUE)),
+    distanceS = (dist-min(dist, na.rm = TRUE)) / (max(dist, na.rm = TRUE) - min(dist, na.rm = TRUE)),
+    speedDiff3S = (speedDiff3-min(speedDiff3, na.rm=TRUE)) / 
+      (max(speedDiff3, na.rm=TRUE)-min(speedDiff3, na.rm = TRUE)),
+    approachingRateRelativeSlead = lead(approachingRateRelativeS),
+    scare2effect = accelerationS - sinousityS - distanceS - lead(approachingRateRelativeS) + speedDiff3S,
+    scare3effect = accelerationS - sinousityDiffS - distanceS - lead(approachingRateRelativeS) + speedDiff3S,
+    scary=scare2effect>1.1,
+    scary=ifelse(is.na(scary), FALSE, scary)) %>% ungroup()
+# 
+
+wildboar_scared <- wildboar_trip_scared %>% filter(scary)
 w <- w %>% left_join(wildboar_trip_scared %>% 
                        dplyr::select(id, scareEffect, triptime0, approachingRate,
                                      approachingRateRelative, approachingRateAbsolute, speed, sinousity,
                                      dist, x, y, scared), by="id")
-wildboar_trip_scared_True <- wildboar_trip_scared %>% group_by(tripIDnight) %>% 
-  mutate(tripScared = sum(scared, na.rm = TRUE)) %>% 
+wildboar_trip_scared_True <- wildboar_trip_scared %>% 
+  group_by(tripIDnight) %>% 
+  mutate(tripScared = sum(scary, na.rm = TRUE)) %>% 
   filter(tripScared > 0)
 ```
 
 # Plot all found shrecks
 ```{r, warning=FALSE}
+
+
+# Amount of scared trips
+unique(wildboar_trip_scared_True$tripIDnight)
 for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight))) 
 {
   test <- wildboar_trip_scared_True %>% filter(tripIDnight==unique(wildboar_trip_scared_True$tripIDnight)[u])
   print(first(test$DatetimeUTC))
   print(first(test$tripIDnight))
   print(ggplot(data=test) +
-    #geom_line( aes(x=triptime0, y=normalize(acceleration)), color="blue")+
-    geom_line( aes(x=triptime0, y=normalize(approachingRateAbsolute)), color="green")+
-    geom_line( aes(x=triptime0, y=normalize(acceleration4)), color="orange")+
-    geom_line( aes(x=triptime0, y=normalize(speed)), color="red")+
-    geom_line( aes(x=triptime0, y=normalize(sinousity)), color="purple")+
-    geom_line( aes(x=triptime0, y=scareEffect), color="black"))
+    geom_line( aes(x=triptime0, y=distanceS, alpha=0.8), color="blue")+
+    geom_line( aes(x=triptime0, y=sinousityDiffS, alpha=0.8), color="green")+
+    geom_line( aes(x=triptime0, y=approachingRateRelativeS, alpha=0.8), color="red")+
+    geom_line( aes(x=triptime0, y=accelerationS, alpha=0.8), color="orange")+
+    geom_line( aes(x=triptime0, y=speedDiff3S, alpha=0.8), color="lightblue")+
+    geom_line( aes(x=triptime0, y=sinousityS, alpha=0.8), color="purple")+
+    #geom_line( aes(x=triptime0, y=scareEffect/4, alpha=0.4), color="black") +
+    geom_line(aes(x=triptime0, y= scare2effect, alpha=0.8), color="brown") +
+    geom_line(aes(x=triptime0, y= scare3effect, alpha=0.8), color="black"))
+
   
   print(ggplot() +
     geom_path(data= test, aes(x=E, y=N, color=triptime0)) +
-    geom_point(data = schreck_locations_ch %>%filter(id == max(test$closest_schreck)), 
+    geom_point(data = schreck_locations_ch %>% filter(id == max(test$closest_schreck)), 
                aes(x=E, y=N), colour="black", size=2) +
-    geom_point(data = test %>% filter(scared), aes(x=E, y=N), color="red"))
+    geom_point(data = test %>% filter(scary), aes(x=E, y=N), color="red"))
 }
+```
+
+```{r}
+  test <- wildboar_trip_scared_True %>% filter(tripIDnight=='Ueli_110')
+  print(first(test$DatetimeUTC))
+  print(first(test$tripIDnight))
+  print(ggplot(data=test) +
+    geom_line( aes(x=triptime0, y=distanceS), color="blue")+
+    geom_line( aes(x=triptime0,
+                   y=approachingRateAbsoluteS), color="green")+
+    #geom_line( aes(x=triptime0, y=normalize(approachingRateRelative)), color="yellow")+
+    geom_line( aes(x=triptime0, y=accelerationS), color="orange")+
+    #geom_line( aes(x=triptime0, y=normalize(speed)), color="red")+
+    geom_line( aes(x=triptime0, y=sinousityS), color="purple")+
+    geom_line( aes(x=triptime0, y=scareEffect/4), color="black") +
+    geom_line(aes(x=triptime0, y= scare2effect), color="brown"))
+
+
+
+ggplot() +
+  geom_path(data=test, aes(x=E, y=N, color=triptime0)) +
+  geom_point(data = schreck_locations_ch %>% 
+               filter(id == max(test$closest_schreck)), aes(x=E, y=N), colour="black", size=2) +
+  geom_point(data = test %>% filter(scary), aes(x=E, y=N), color="red")
 
 ggplot() +
   geom_path(data=wildboar_trip, aes(x=E, y=N, color=approachingRate)) +
   geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
-  geom_point(data = wildboar_trip %>% filter(scared | isScared), aes(x=E, y=N), color="red")
-
-ggplot() +
-  geom_path(data=wildboar_trip, aes(x=E, y=N, color=approachingRate)) +
-  geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
-  geom_point(data = wildboar_trip %>% filter(scared | isScared), aes(x=E, y=N), color="red")
+  geom_point(data = wildboar_trip %>% filter(scared | scared), aes(x=E, y=N), color="red")
 
 ggplot() +
   geom_path(data=wildboar_trip, aes(x=E, y=N, color=speed)) +
   geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
-  geom_point(data = wildboar_trip %>% filter(scared | isScared), aes(x=E, y=N), color="red")
+  geom_point(data = wildboar_trip %>% filter(scared | scared), aes(x=E, y=N), color="red")
 
 ggplot() +
   geom_path(data=wildboar_trip, aes(x=E, y=N, color=sinousity)) +
   geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
-  geom_point(data = wildboar_trip %>% filter(scared | isScared), aes(x=E, y=N), color="red")
+  geom_point(data = wildboar_trip %>% filter(scared | scared), aes(x=E, y=N), color="red")
+
+#ggplot(data=test) +
+ #   geom_line( aes(x=triptime0, y=dist*100/max(dist), color="blue")+
+  #  geom_line( aes(x=triptime0, y=normalize(approachingRateAbsolute)), color="green")+
+    #geom_line( aes(x=triptime0, y=normalize(approachingRateRelative)), color="yellow")+
+   # geom_line( aes(x=triptime0, y=normalize(acceleration)), color="orange")+
+    #geom_line( aes(x=triptime0, y=normalize(speed)), color="red")+
+    #geom_line( aes(x=triptime0, y=normalize(sinousity)), color="purple")+
+    #geom_line( aes(x=triptime0, y=scareEffect), color="black"))
 ```
 
 
