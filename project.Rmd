@@ -178,17 +178,13 @@ w %>% dplyr::select(DatetimeUTC, tripdate2)
 # Separation of the wildboar trips
 ```{r }
 
-####### create trips: two hour before and two hours after first observation at "Abenddaemmerung" (i.e. presumed start of Schrecks)
-#####
-
 # split time and day in separate columns:
 w1$Date <- as.Date(w1$DatetimeUTC)
 ## order data frame by animal and time
 w1<-w1[order(w1$TierName) & order(w1$DatetimeUTC),]
 
-#
 
-##### Create trips: with shorest distance to schreck (each day) ########################################
+##### Create trips: with shorest distance to schreck (for each tripdate) ########################################
 
 # split time and day in separate columns:
 w1$Date <- as.Date(w1$DatetimeUTC)
@@ -199,7 +195,9 @@ w1<-w1[order(w1$TierName) & order(w1$DatetimeUTC),]
 ## empty column for trip id
 w$tripID_dist<-"NA"
 w$start_dist<-"no"
+w$isNearestPoint <- "no"
 animals<-unique(w1$TierName)
+
 for(j in 1:length(animals)){
   days<-unique(w1[w1$TierName==animals[j] & !is.na(w1$TierName),]$tripdate2) 
   if(length(days)!=0){
@@ -210,20 +208,26 @@ for(j in 1:length(animals)){
       if(!is.na(nmin)){ ## only continue if nmin is not NA
         if(nmin<=400){ ## only continue if minimal distance to schreck is less than 400m
       n<-n[n$distance_to_closest_schreck==nmin & !is.na(n$distance_to_closest_schreck),]
-        w[w$TierName==animals[j] & (w$DatetimeUTC >= n$DatetimeUTC-2*60*60) & (w$DatetimeUTC <= n$DatetimeUTC+2*60*60),"tripID_dist"]<-paste(animals[j],i, sep="_")
+      w[w$TierName==animals[j] & w$DatetimeUTC == n$DatetimeUTC, "isNearestPoint"] <- "yes"
+        w[w$TierName==animals[j] & (w$DatetimeUTC >= n$DatetimeUTC-4*60*60) & (w$DatetimeUTC <= n$DatetimeUTC+4*60*60),"tripID_dist"]<-paste(animals[j],i, sep="_")                               
         w[w$TierName==animals[j] & w$DatetimeUTC==n$DatetimeUTC,"start_dist"]<-"yes"
       }}}}}
 
-
+# Only trips in the night
 w <- w %>% group_by(TierID, tripdate2) %>% mutate(isTrip= max(tripID_dist) != 'NA',
                                           tripIDnight = ifelse((hour < 9.1 | hour >= 17.9)&isTrip,
                                                               max(tripID_dist), NA)) %>% ungroup()
 
-### list of all trips based on closest distance per day and two hours before and after
-trips_dist<-unique(w$tripIDnight)
 
-head(trips_dist)
+# length(unique(w$tripIDnight)); table(w[!is.na(w$tripIDnight),]$isNearestPoint)
 
+#List with closest_distance to schreck for each trip
+trip_list <- w %>% 
+  filter (isNearestPoint=="yes" & !is.na (tripIDnight))
+
+nrow(trip_list)
+
+head(data.frame(trip_list))
 ```
 
 # Wildschewinschreck
@@ -507,5 +511,33 @@ ggplot() +
     #geom_line( aes(x=triptime0, y=scareEffect), color="black"))
 ```
 
+# How long does the scare-off effect last
+```{r}
+w$return <- "NA"
+w$return <- as.character(w$return)
+w$return_hrs <- NA
+
+for(j in 1:nrow(trip_list)){
+  w$return <- as.character(w$return)
+  w$return_hrs <- as.numeric(as.character(w$return_hrs))
+  under400 <- w[w$TierName==trip_list$TierName[j] & w$DatetimeUTC>trip_list$DatetimeUTC[j] + 4*60*60 & w$closest_schreck==trip_list$closest_schreck[j] & !is.na(w$distance_to_closest_schreck),]  
+  
+under400 <- under400[order(under400$DatetimeUTC),]
+ if(nrow(under400)==0){w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),]$return <- "never"
+ w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return_hrs"] <- NA
+ } else{
+   w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return"] <- as.character(under400[1,]$DatetimeUTC) 
+   w$return <- as.POSIXct(w$return, format="%Y-%m-%d %H:%M:%S",tz="UTC")
+   return_time <- as.numeric(as.character(difftime(under400[1,]$DatetimeUTC,trip_list[j,]$DatetimeUTC, units="hours")))
+   w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),"return_hrs"] <- return_time
+ }}
+   
+w$return_hrs <- round(w$return_hrs,digits = 2)
 
 
+
+```
+
+# Adding Crop Field
+```{r}
+crop <- read_sf("Feldaufnahmen_Fanel.gpkg")
