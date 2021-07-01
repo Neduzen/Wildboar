@@ -232,6 +232,15 @@ head(data.frame(trip_list))
 
 # Wildschewinschreck
 ```{r}
+
+# Determine mean speaker orientation
+schreck_locations_ch <- schreck_locations_ch %>% 
+  mutate(ausrichtung_mean = (ausrichtung_max - ausrichtung_min) / 2 +ausrichtung_min,
+         ausrichtung_dir = ifelse(ausrichtung_mean >= 45 & ausrichtung_mean < 135, "E", 
+                                  ifelse(ausrichtung_mean > 135 & ausrichtung_mean < 225, "S",
+                                         ifelse(ausrichtung_mean > 225 & ausrichtung_mean < 315, "W", "N")))) 
+
+
 s1 <- schreck_locations_ch[5,]
 
 wildboar_closeup <- wildschwein_BE %>% 
@@ -290,23 +299,13 @@ ggplot() +
 trips <- w %>% filter(!is.na(tripIDnight)) %>% group_by(tripIDnight)
 trips 
 
-# calculate properties of scarce (approaching rate, speed)
-s1 <- schreck_locations_ch[5,]
-#wildboar_trip <- wildschwein_BE %>% 
-#  filter(TierName=="Sabine" & DatetimeUTC > as_datetime('2015-06-08 19:30:43') & 
- #          DatetimeUTC < as_datetime('2015-06-09 08:30:43')) %>% 
-#  mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
- # mutate(triptime0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,triptime0)
-wildboar_trip <- w %>% filter(tripIDnight=="Olga_6") %>% ungroup() %>% 
-  mutate(dist = sqrt((first(s1$N)-N)^2+(first(s1$E)-E)^2)) %>% 
-  mutate(triptime0 = as.numeric((DatetimeUTC - min(DatetimeUTC))) / 60) %>% arrange(.,triptime0)
-
-wildboar_trip_scared <- data.frame(matrix(ncol = 20, nrow = 0))
+wildboar_trip_scared <- data.frame(matrix(ncol = 21, nrow = 0))
 x <- c("id", "triptime0", "approachingRate", "approachingRateRelative",
        "approachingRateAbsolute", "speed", "sinousity", "linedist", "acceleration", "speedDiff3", 
-       "dist","E", "N","x", "y", 
+       "dist","E", "N","x", "y", "directionRelative",
        "closest_schreck", "tripIDnight", "DatetimeUTC", "hour", "day")
 colnames(wildboar_trip_scared) <- x
+unique(trips$tripIDnight)
 
 for (u in 1:length(unique(trips$tripIDnight)))
 {
@@ -325,11 +324,11 @@ for (u in 1:length(unique(trips$tripIDnight)))
         distanceAbsolute = ((E- lag(E))^2 + (N-lag(N))^2)^0.5) %>% arrange(.,triptime0)
     
     # Calculate approaching rate
-    wildboar_trip <- wildboar_trip %>%  mutate(approachingRate = lag(dist)-dist,
-                                               approachingRateAbsolute = 
-                                                 approachingRate / (triptimeDiff),
-                                               approachingRateRelative = 
-                                                 approachingRate / (distanceAbsolute))
+    wildboar_trip <- wildboar_trip %>%  
+      mutate(approachingRate = lag(dist)-dist,
+             approachingRateAbsolute = approachingRate / (triptimeDiff),
+             approachingRateRelative = approachingRate / (distanceAbsolute),
+             approachingRateRelative = ifelse(is.na(approachingRateRelative), 0, approachingRateRelative))
     # Calculate speed & acceleration
     wildboar_trip <- wildboar_trip %>%
       mutate(speed = round(distanceAbsolute / triptimeDiff, 4),
@@ -357,14 +356,18 @@ for (u in 1:length(unique(trips$tripIDnight)))
     # Get proximity of movement
     wildboar_trip <- wildboar_trip %>%
      mutate(linedist = ((x^2+y^2)^0.5 + ((x-lag(x))^2+(y-lag(y))^2)^0.5)/2)
-
+    # Get relative direction to scare device
+    wildboar_trip <- wildboar_trip %>% mutate(directionRelative=
+                                                ifelse(abs(x) > abs(y),
+                                                       ifelse(x>0, "E", "W"),
+                                                       ifelse(y>0, "N", "S")))
+    # Select
     wildboar_trip_scared <- wildboar_trip_scared %>% 
       rbind(wildboar_trip %>% 
               dplyr::select(id, triptime0, approachingRate, approachingRateRelative,
                             approachingRateAbsolute, speed, sinousity, linedist, acceleration, 
-                            speedDiff3, dist, E, N, x, y, closest_schreck, tripIDnight, 
-                            DatetimeUTC, 
-                            hour, day))
+                            speedDiff3, dist, E, N, x, y, directionRelative, closest_schreck, tripIDnight, 
+                            DatetimeUTC, hour, day))
   }
 }
 head(wildboar_trip_scared)
@@ -382,8 +385,9 @@ wildboar_trip_scared <- wildboar_trip_scared %>% group_by(tripIDnight) %>%
       (max(speedDiff3, na.rm=TRUE)-min(speedDiff3, na.rm = TRUE)),
     approachingRateRelativeSlead = lead(approachingRateRelativeS),
     scareEffect = accelerationS - sinousityS - distanceS - lead(approachingRateRelativeS) + speedDiff3S,
-    scary= scareEffect > 1.2,
-    scary= ifelse(is.na(scary), FALSE, scary)) %>% 
+    scary= scareEffect > 1.3,
+    scary= ifelse(is.na(scary), FALSE, scary),
+    scary= ifelse(scary&lag(scary), FALSE, scary)) %>% 
   ungroup()
 
 # Get scared points
@@ -397,27 +401,48 @@ wildboar_trip_scared_True <- wildboar_trip_scared %>%
 
 # Join trips with scared wildboars
 w <- w %>% left_join(wildboar_trip_scared_True %>% 
-                       dplyr::select(id, scareEffect, triptime0, acceleration,
-                                     approachingRateRelative, speedDiff3, sinousity,
-                                     dist, x, y, scary), by="id")
+                       dplyr::select(id, scareEffect, triptime0, accelerationS,
+                                     approachingRateRelativeSlead, speedDiff3S, sinousityS,
+                                     distanceS, x, y, scary), by="id")
 ```
 
 # Plot all found shrecks
 ```{r, warning=FALSE}
 # Amount of scared trips
+unique(wildboar_trip_scared$tripIDnight)
 unique(wildboar_trip_scared_True$tripIDnight)
+
 for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight))) 
 {
   test <- wildboar_trip_scared_True %>% filter(tripIDnight==unique(wildboar_trip_scared_True$tripIDnight)[u])
   print(first(test$DatetimeUTC))
   print(first(test$tripIDnight))
-  print(ggplot(data=test) +
-    geom_line( aes(x=triptime0, y=distanceS, alpha=0.8), color="blue")+
-    geom_line( aes(x=triptime0, y=approachingRateRelativeS, alpha=0.8), color="red")+
-    geom_line( aes(x=triptime0, y=accelerationS, alpha=0.8), color="orange")+
-    geom_line( aes(x=triptime0, y=speedDiff3S, alpha=0.8), color="lightblue")+
-    geom_line( aes(x=triptime0, y=sinousityS, alpha=0.8), color="purple")+
-    geom_line(aes(x=triptime0, y= scareEffect, alpha=0.8), color="brown"))
+  print(ggplot(data=test) + 
+    geom_vline(xintercept = (test %>% filter(scary) %>% select(triptime0))$triptime0[1]/60, color="brown") +
+    geom_line( aes(x=triptime0/60, y=distanceS, alpha=0.8), color="blue") +
+    geom_line( aes(x=triptime0/60, y=approachingRateRelativeS, alpha=0.8), color="green") +
+    geom_line( aes(x=triptime0/60, y=accelerationS, alpha=0.8), color="orange") +
+    geom_line( aes(x=triptime0/60, y=speedDiff3S, alpha=0.8), color="red") +
+    geom_line( aes(x=triptime0/60, y=sinousityS, alpha=0.8), color="purple") +
+    geom_line(aes(x=triptime0/60, y= scareEffect, alpha=0.8), color="black")) + 
+    ggtitle(paste("Wildboar trip", first(test$tripIDnight), "started at", first(test$DatetimeUTC))) +
+    xlab("Hour passed by from 18:00 p.m.") + ylab("Scaled variables (0 to 1) and scare effect (-3 to 2)")
+  
+    testClose <- test %>% 
+      filter(scary | lead(scary) | lead(scary,2)| lead(scary,3)| lead(scary,4) | lag(scary,1)| lag(scary,2)| lag(scary,3)| lag(scary,4))
+  print(first(test$DatetimeUTC))
+  print(first(test$tripIDnight))
+  print(ggplot(data=testClose) + 
+    geom_vline(xintercept = (test %>% filter(scary) %>% select(triptime0))$triptime0[1]/60, color="brown") +
+    geom_line( aes(x=triptime0/60, y=distanceS, alpha=0.8), color="blue") +
+    geom_line( aes(x=triptime0/60, y=approachingRateRelativeS, alpha=0.8), color="green") +
+    geom_line( aes(x=triptime0/60, y=accelerationS, alpha=0.8), color="orange") +
+    geom_line( aes(x=triptime0/60, y=speedDiff3S, alpha=0.8), color="red") +
+    geom_line( aes(x=triptime0/60, y=sinousityS, alpha=0.8), color="purple") +
+    geom_line(aes(x=triptime0/60, y= scareEffect, alpha=0.8), color="black")) + 
+    ggtitle(paste("Wildboar trip", first(testClose$tripIDnight), "1 hour before and after scare effect at",
+                  testClose$DatetimeUTC[5]) +
+    xlab("Hour passed by from 18:00 p.m.") + ylab("Scaled variables (0 to 1) and scare effect (-3 to 2)")
   
   print(ggplot() +
     geom_path(data= test, aes(x=E, y=N, color=triptime0)) +
@@ -426,6 +451,29 @@ for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight)))
     geom_point(data = test %>% filter(scary), aes(x=E, y=N), color="red"))
 }
 ```
+
+# Plot all found shrecks
+```{r}
+wildboar_scared_schreck <- wildboar_scared %>% left_join(schreck_locations_ch, by=c("closest_schreck"="id")) 
+
+wildboar_scared_schreck <- wildboar_scared_schreck %>% 
+  select(ausrichtung_dir, directionRelative, dist, lautstaerke, scareEffect) %>% 
+  mutate(sameDirection=ausrichtung_dir==directionRelative,
+         #soundDistance=lautstaerke/dist,
+         #schreckProbabily= soundDistance*(1+sameDirection)/ (50/50*2) * 100,
+         volumeDir = ifelse(sameDirection, lautstaerke, 
+                           ifelse(ausrichtung_dir=='S'&directionRelative=='N' | 
+                                    ausrichtung_dir=='N'& directionRelative=='S' | 
+                                    ausrichtung_dir=='W'& directionRelative=='E'| 
+                                    ausrichtung_dir=='E'& directionRelative=='W', 
+                                  0.5*lautstaerke, 0.75*lautstaerke)),
+         soundDistance = volumeDir - abs(20 * log(1/dist, 10)),
+         schreckProbabily = soundDistance *100/40)
+plot(wildboar_scared_schreck$scareEffect, wildboar_scared_schreck$schreckProbabily)
+wildboar_scared
+schreck_locations_ch
+```
+
 
 # How long does the scare-off effect last
 ```{r}
