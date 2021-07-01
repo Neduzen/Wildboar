@@ -385,6 +385,7 @@ wildboar_trip_scared <- wildboar_trip_scared %>% group_by(tripIDnight) %>%
       (max(speedDiff3, na.rm=TRUE)-min(speedDiff3, na.rm = TRUE)),
     approachingRateRelativeSlead = lead(approachingRateRelativeS),
     scareEffect = accelerationS - sinousityS - distanceS - lead(approachingRateRelativeS) + speedDiff3S,
+    scareEffectShow = ifelse(scareEffect<0, -0.1, scareEffect),
     scary= scareEffect > 1.3,
     scary= ifelse(is.na(scary), FALSE, scary),
     scary= ifelse(scary&lag(scary), FALSE, scary)) %>% 
@@ -417,38 +418,51 @@ for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight)))
   test <- wildboar_trip_scared_True %>% filter(tripIDnight==unique(wildboar_trip_scared_True$tripIDnight)[u])
   print(first(test$DatetimeUTC))
   print(first(test$tripIDnight))
+  # Variable values
   print(ggplot(data=test) + 
-    geom_vline(xintercept = (test %>% filter(scary) %>% select(triptime0))$triptime0[1]/60, color="brown") +
-    geom_line( aes(x=triptime0/60, y=distanceS, alpha=0.8), color="blue") +
-    geom_line( aes(x=triptime0/60, y=approachingRateRelativeS, alpha=0.8), color="green") +
-    geom_line( aes(x=triptime0/60, y=accelerationS, alpha=0.8), color="orange") +
-    geom_line( aes(x=triptime0/60, y=speedDiff3S, alpha=0.8), color="red") +
-    geom_line( aes(x=triptime0/60, y=sinousityS, alpha=0.8), color="purple") +
-    geom_line(aes(x=triptime0/60, y= scareEffect, alpha=0.8), color="black")) + 
+    geom_bar(stat="identity", aes(x=triptime0/60, y=scareEffectShow),fill = "grey", size=1.3)+ 
+    geom_line( aes(x=triptime0/60, y=distanceS, alpha=0.8), color="blue", size=1.3) +
+    geom_line( aes(x=triptime0/60, y=approachingRateRelativeS, alpha=0.8), color="green", size=1.3) +
+    geom_line( aes(x=triptime0/60, y=speedDiff3S, alpha=0.8), color="red", size=1.3) +
+    geom_line( aes(x=triptime0/60, y=sinousityS, alpha=0.8), color="turquoise", size=1.3) +
+    geom_line( aes(x=triptime0/60, y=accelerationS, alpha=0.8), color="orange", size=1.3) +
     ggtitle(paste("Wildboar trip", first(test$tripIDnight), "started at", first(test$DatetimeUTC))) +
-    xlab("Hour passed by from 18:00 p.m.") + ylab("Scaled variables (0 to 1) and scare effect (-3 to 2)")
+    xlab("Hour passed by from 18:00 p.m.") + ylab("Scaled variables (0 to 1) and scare effect (-3 to 2)"))
   
     testClose <- test %>% 
       filter(scary | lead(scary) | lead(scary,2)| lead(scary,3)| lead(scary,4) | lag(scary,1)| lag(scary,2)| lag(scary,3)| lag(scary,4))
   print(first(test$DatetimeUTC))
   print(first(test$tripIDnight))
   print(ggplot(data=testClose) + 
-    geom_vline(xintercept = (test %>% filter(scary) %>% select(triptime0))$triptime0[1]/60, color="brown") +
-    geom_line( aes(x=triptime0/60, y=distanceS, alpha=0.8), color="blue") +
-    geom_line( aes(x=triptime0/60, y=approachingRateRelativeS, alpha=0.8), color="green") +
-    geom_line( aes(x=triptime0/60, y=accelerationS, alpha=0.8), color="orange") +
-    geom_line( aes(x=triptime0/60, y=speedDiff3S, alpha=0.8), color="red") +
-    geom_line( aes(x=triptime0/60, y=sinousityS, alpha=0.8), color="purple") +
-    geom_line(aes(x=triptime0/60, y= scareEffect, alpha=0.8), color="black")) + 
+    geom_bar(stat="identity", aes(x=(triptime0-testClose$triptime0[5]), y=scareEffectShow),
+             fill = "grey", size=1.3)+
+    geom_line(aes(x=(triptime0-testClose$triptime0[5]), y=distanceS, alpha=0.8, colour="Distance"),
+               color="blue", size=1.3) +
+    geom_line( aes(x=(triptime0-testClose$triptime0[5]), 
+                   y=approachingRateRelativeS, alpha=0.8), color="green", size=1.3) +
+    geom_line( aes(x=(triptime0-testClose$triptime0[5]), y=accelerationS, alpha=0.8), color="orange", size=1.3) +
+    geom_line( aes(x=(triptime0-testClose$triptime0[5]), y=speedDiff3S, alpha=0.8), color="red", size=1.3) +
+    geom_line( aes(x=(triptime0-testClose$triptime0[5]), y=sinousityS, alpha=0.8), color="turquoise", size=1.3) +
     ggtitle(paste("Wildboar trip", first(testClose$tripIDnight), "1 hour before and after scare effect at",
-                  testClose$DatetimeUTC[5]) +
-    xlab("Hour passed by from 18:00 p.m.") + ylab("Scaled variables (0 to 1) and scare effect (-3 to 2)")
+                  testClose$DatetimeUTC[5])) +
+    xlab("Minutes before or after the scare effect") + 
+    ylab("Scaled variables (0 to 1) and scare effect (-3 to 2)")+ 
+    theme(legend.position = "bottom"))
+  
+  print(ggplot() +
+    geom_path(data= testClose, aes(x=E, y=N, color=(triptime0-testClose$triptime0[5]))) +
+    geom_point(data = schreck_locations_ch %>% filter(id == max(test$closest_schreck)), 
+               aes(x=E, y=N), colour="black", size=2) +
+    geom_point(data = test %>% filter(scary), aes(x=E, y=N), color="red")+
+    ggtitle(paste("Wildboar trip", first(test$tripIDnight), "started at", first(test$DatetimeUTC))))
   
   print(ggplot() +
     geom_path(data= test, aes(x=E, y=N, color=triptime0)) +
     geom_point(data = schreck_locations_ch %>% filter(id == max(test$closest_schreck)), 
                aes(x=E, y=N), colour="black", size=2) +
-    geom_point(data = test %>% filter(scary), aes(x=E, y=N), color="red"))
+    geom_point(data = test %>% filter(scary), aes(x=E, y=N), color="red")+
+    ggtitle(paste("Wildboar trip", first(testClose$tripIDnight), "1 hour before and after scare effect at",
+                  testClose$DatetimeUTC[5])))
 }
 ```
 
