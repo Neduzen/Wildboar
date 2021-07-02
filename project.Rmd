@@ -49,6 +49,7 @@ schreck_locations_ch$wid <- c(1:25)
 schreck_locations_ch <- schreck_locations_ch %>% mutate(wid=as.character(wid))
 ```
 
+
 # Get common data, show examples
 ```{r }
 # Get common samples
@@ -102,12 +103,11 @@ ggplot() +
   geom_point(data=sabi, aes(x=E, y=N,color="blue")) + ylim(1200000, 1210000) +  xlim(2568000, 2578000)
 sabi %>% filter(day==10)
 
-
-
 ```
 
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
 
 # Adding closest active schreck (+ distance) to each observation
 ```{r }
@@ -230,6 +230,17 @@ nrow(trip_list)
 head(data.frame(trip_list))
 ```
 
+# Overview data
+```{r}
+### plot
+pa<-ggplot(w,aes(x=date,y=TierName))+geom_line()
+pa<-pa+ylab("animal ID")+scale_x_date(breaks = "3 month", minor_breaks = "1 month")+xlab("date")+theme_bw()
+pa
+#ps<-ggplot(s[s$id %in% w$closest_schreck,],aes(y=id,yend=id,x=datum_on,xend=datum_off))+geom_segment()
+#ps
+
+```
+
 # Wildschewinschreck
 ```{r}
 
@@ -290,7 +301,7 @@ ggplot() +
   geom_point(data = s1, aes(x=E, y=N), colour="black", size=2) +
   geom_point(data = schreck_orientation, aes(x=ausrichung_meanE, y=ausrichung_meanN), 
              colour="brown", size=2) +
-  geom_polygon(data=pos, aes(x=x, y = y, fill="orange", alpha=0.4))
+  geom_polygon(data=pos, aes(x=x, y = y), fill="orange", alpha=0.4)
 ```
 
 # Wilddboar scare effect properties
@@ -519,9 +530,49 @@ schreck_locations_ch
 #    
 # w$return_hrs <- round(w$return_hrs,digits = 2)
 
+### file with trips
+tt<-w[!is.na(w$tripIDnight) & w$isNearestPoint=="yes",]
+head(data.frame(tt))
+ ph<-ggplot(tt,aes(x=return_hrs))+geom_histogram(binwidth = 6)+theme_bw()+xlab("hours until animal returned within 400 of schreck [m]")
+ ph
+
+ 
+#### 
+ meanreturn<-aggregate(return_hrs~TierName, data=tt,mean)
+ nreturn<-aggregate(return_hrs~TierName, data=tt,length)
+ sdreturn<-aggregate(return_hrs~TierName, data=tt,sd)
+ 
+ ## calculate standard error from sample size (n) and standard diviation (sd)
+ meanreturn$SE<-sdreturn$return_hrs/sqrt(sdreturn$return_hrs)
+meanreturn$lwr<-meanreturn$return_hrs-meanreturn$SE
+meanreturn$upr<-meanreturn$return_hrs+meanreturn$SE
+
+ pm<-ggplot(meanreturn,aes(y=return_hrs,x=TierName))+geom_point()
+ pm<-pm+geom_errorbar(data=data.frame(meanreturn),aes(ymin=lwr,ymax=upr),width=0.4)+theme_bw()+xlab("Animal ID")+ylab("mean and SE of hours until return")
+ 
+ ## boxplot
+ ptt<-ggplot(tt,aes(y=return_hrs,x=TierName))+geom_boxplot()+theme_bw()
+ ptt
+ 
+ ### correlation
+ ttt<-tt[!is.na(tt$scareEffect),]
+ ### table(ttt$TierName) very few trips, majority by Olga (19) and Sabine (16)
+ plot(ttt$scareEffect,ttt$return_hrs)
+ abline(lm(ttt$return_hrs~ttt$scareEffect),col="red")
+ cor.test(ttt$scareEffect,ttt$return_hrs, method="spearman")
+ 
+ ## linear model
+ mp<-ggplot(ttt,aes(y=return_hrs,x=scareEffect))+geom_point()+geom_smooth(method="lm")+theme_bw()+ylab("hours until return")
+ mp
+m<-lm(return_hrs~scareEffect,data=ttt) ## model assumptions not very well fulfilled, see qqplot
+par(mfrow=c(2,2))
+plot(m)
+par(mfrow=c(1,1))
+summary(m)     
 
 
 ```
+
 
 # Adding Crop Field
 ```{r}
