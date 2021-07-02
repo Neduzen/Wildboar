@@ -386,7 +386,7 @@ wildboar_trip_scared <- wildboar_trip_scared %>% group_by(tripIDnight) %>%
     approachingRateRelativeSlead = lead(approachingRateRelativeS),
     scareEffect = accelerationS - sinousityS - distanceS - lead(approachingRateRelativeS) + speedDiff3S,
     scareEffectShow = ifelse(scareEffect<0, -0.1, scareEffect),
-    scary= scareEffect > 1.3,
+    scary= scareEffect > 1.1,
     scary= ifelse(is.na(scary), FALSE, scary),
     scary= ifelse(scary&lag(scary), FALSE, scary)) %>% 
   ungroup()
@@ -400,8 +400,8 @@ wildboar_trip_scared_True <- wildboar_trip_scared %>%
   mutate(tripScared = sum(scary, na.rm = TRUE)) %>% 
   filter(tripScared > 0)
 
-# Join trips with scared wildboars
-w <- w %>% left_join(wildboar_trip_scared_True %>% 
+# Join trips with scared wild boars
+w <- w %>% left_join(wildboar_trip_scared_True %>% ungroup() %>% 
                        dplyr::select(id, scareEffect, triptime0, accelerationS,
                                      approachingRateRelativeSlead, speedDiff3S, sinousityS,
                                      distanceS, x, y, scary), by="id")
@@ -422,7 +422,7 @@ for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight)))
   print(ggplot(data=test) + 
     geom_bar(stat="identity", aes(x=triptime0/60, y=scareEffectShow),fill = "grey", size=1.3)+ 
     geom_line( aes(x=triptime0/60, y=distanceS, alpha=0.8), color="blue", size=1.3) +
-    geom_line( aes(x=triptime0/60, y=approachingRateRelativeS, alpha=0.8), color="green", size=1.3) +
+    geom_line( aes(x=triptime0/60, y=approachingRateRelativeSlead, alpha=0.8), color="green", size=1.3) +
     geom_line( aes(x=triptime0/60, y=speedDiff3S, alpha=0.8), color="red", size=1.3) +
     geom_line( aes(x=triptime0/60, y=sinousityS, alpha=0.8), color="turquoise", size=1.3) +
     geom_line( aes(x=triptime0/60, y=accelerationS, alpha=0.8), color="orange", size=1.3) +
@@ -439,7 +439,7 @@ for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight)))
     geom_line(aes(x=(triptime0-testClose$triptime0[5]), y=distanceS, alpha=0.8, colour="Distance"),
                color="blue", size=1.3) +
     geom_line( aes(x=(triptime0-testClose$triptime0[5]), 
-                   y=approachingRateRelativeS, alpha=0.8), color="green", size=1.3) +
+                   y=approachingRateRelativeSlead, alpha=0.8), color="green", size=1.3) +
     geom_line( aes(x=(triptime0-testClose$triptime0[5]), y=accelerationS, alpha=0.8), color="orange", size=1.3) +
     geom_line( aes(x=(triptime0-testClose$triptime0[5]), y=speedDiff3S, alpha=0.8), color="red", size=1.3) +
     geom_line( aes(x=(triptime0-testClose$triptime0[5]), y=sinousityS, alpha=0.8), color="turquoise", size=1.3) +
@@ -471,7 +471,7 @@ for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight)))
 wildboar_scared_schreck <- wildboar_scared %>% left_join(schreck_locations_ch, by=c("closest_schreck"="id")) 
 
 wildboar_scared_schreck <- wildboar_scared_schreck %>% 
-  select(ausrichtung_dir, directionRelative, dist, lautstaerke, scareEffect) %>% 
+  select(ausrichtung_dir, directionRelative, dist, lautstaerke, scareEffect, modus) %>% 
   mutate(sameDirection=ausrichtung_dir==directionRelative,
          #soundDistance=lautstaerke/dist,
          #schreckProbabily= soundDistance*(1+sameDirection)/ (50/50*2) * 100,
@@ -483,7 +483,14 @@ wildboar_scared_schreck <- wildboar_scared_schreck %>%
                                   0.5*lautstaerke, 0.75*lautstaerke)),
          soundDistance = volumeDir - abs(20 * log(1/dist, 10)),
          schreckProbabily = soundDistance *100/40)
+
 plot(wildboar_scared_schreck$scareEffect, wildboar_scared_schreck$schreckProbabily)
+plot(wildboar_scared_schreck$scareEffect, wildboar_scared_schreck$soundDistance)
+
+wildboar_scared_schreck2 <- wildboar_scared_schreck %>% filter(scareEffect > 1.40)
+plot(wildboar_scared_schreck2$scareEffect, wildboar_scared_schreck2$soundDistance)
+
+
 wildboar_scared
 schreck_locations_ch
 ```
@@ -491,26 +498,26 @@ schreck_locations_ch
 
 # How long does the scare-off effect last
 ```{r}
-w$return <- replicate(length(w$N), "NA")
-w$return <- as.character(w$return)
-w$return_hrs <- NA
-
-for(j in 1:nrow(trip_list)){
-  w$return <- as.character(w$return)
-  w$return_hrs <- as.numeric(as.character(w$return_hrs))
-  under400 <- w[w$TierName==trip_list$TierName[j] & w$DatetimeUTC>trip_list$DatetimeUTC[j] + 4*60*60 & w$closest_schreck==trip_list$closest_schreck[j] & !is.na(w$distance_to_closest_schreck),]  
-  
-under400 <- under400[order(under400$DatetimeUTC),]
- if(nrow(under400)==0){w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),]$return <- "never"
- w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return_hrs"] <- NA
- } else{
-   w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return"] <- as.character(under400[1,]$DatetimeUTC) 
-   w$return <- as.POSIXct(w$return, format="%Y-%m-%d %H:%M:%S",tz="UTC")
-   return_time <- as.numeric(as.character(difftime(under400[1,]$DatetimeUTC,trip_list[j,]$DatetimeUTC, units="hours")))
-   w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),"return_hrs"] <- return_time
- }}
-   
-w$return_hrs <- round(w$return_hrs,digits = 2)
+# w$return <- replicate(length(w$N), "NA")
+# w$return <- as.character(w$return)
+# w$return_hrs <- NA
+# 
+# for(j in 1:nrow(trip_list)){
+#   w$return <- as.character(w$return)
+#   w$return_hrs <- as.numeric(as.character(w$return_hrs))
+#   under400 <- w[w$TierName==trip_list$TierName[j] & w$DatetimeUTC>trip_list$DatetimeUTC[j] + 4*60*60 & w$closest_schreck==trip_list$closest_schreck[j] & !is.na(w$distance_to_closest_schreck),]  
+#   
+# under400 <- under400[order(under400$DatetimeUTC),]
+#  if(nrow(under400)==0){w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),]$return <- "never"
+#  w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return_hrs"] <- NA
+#  } else{
+#    w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return"] <- as.character(under400[1,]$DatetimeUTC) 
+#    w$return <- as.POSIXct(w$return, format="%Y-%m-%d %H:%M:%S",tz="UTC")
+#    return_time <- as.numeric(as.character(difftime(under400[1,]$DatetimeUTC,trip_list[j,]$DatetimeUTC, units="hours")))
+#    w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),"return_hrs"] <- return_time
+#  }}
+#    
+# w$return_hrs <- round(w$return_hrs,digits = 2)
 
 
 
@@ -518,4 +525,4 @@ w$return_hrs <- round(w$return_hrs,digits = 2)
 
 # Adding Crop Field
 ```{r}
-crop <- read_sf("Feldaufnahmen_Fanel.gpkg")
+#crop <- read_sf("Feldaufnahmen_Fanel.gpkg")
