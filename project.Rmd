@@ -509,26 +509,26 @@ schreck_locations_ch
 
 # How long does the scare-off effect last
 ```{r}
-# w$return <- replicate(length(w$N), "NA")
-# w$return <- as.character(w$return)
-# w$return_hrs <- NA
-# 
-# for(j in 1:nrow(trip_list)){
-#   w$return <- as.character(w$return)
-#   w$return_hrs <- as.numeric(as.character(w$return_hrs))
-#   under400 <- w[w$TierName==trip_list$TierName[j] & w$DatetimeUTC>trip_list$DatetimeUTC[j] + 4*60*60 & w$closest_schreck==trip_list$closest_schreck[j] & !is.na(w$distance_to_closest_schreck),]  
-#   
-# under400 <- under400[order(under400$DatetimeUTC),]
-#  if(nrow(under400)==0){w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),]$return <- "never"
-#  w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return_hrs"] <- NA
-#  } else{
-#    w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return"] <- as.character(under400[1,]$DatetimeUTC) 
-#    w$return <- as.POSIXct(w$return, format="%Y-%m-%d %H:%M:%S",tz="UTC")
-#    return_time <- as.numeric(as.character(difftime(under400[1,]$DatetimeUTC,trip_list[j,]$DatetimeUTC, units="hours")))
-#    w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),"return_hrs"] <- return_time
-#  }}
-#    
-# w$return_hrs <- round(w$return_hrs,digits = 2)
+w$return <- replicate(length(w$N), "NA")
+w$return <- as.character(w$return)
+w$return_hrs <- NA
+
+for(j in 1:nrow(trip_list)){
+  w$return <- as.character(w$return)
+  w$return_hrs <- as.numeric(as.character(w$return_hrs))
+  under400 <- w[w$TierName==trip_list$TierName[j] & w$DatetimeUTC>trip_list$DatetimeUTC[j] + 4*60*60 & w$closest_schreck==trip_list$closest_schreck[j] & !is.na(w$distance_to_closest_schreck),]
+
+under400 <- under400[order(under400$DatetimeUTC),]
+ if(nrow(under400)==0){w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),]$return <- "never"
+ w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return_hrs"] <- NA
+ } else{
+   w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight), "return"] <- as.character(under400[1,]$DatetimeUTC)
+   w$return <- as.POSIXct(w$return, format="%Y-%m-%d %H:%M:%S",tz="UTC")
+   return_time <- as.numeric(as.character(difftime(under400[1,]$DatetimeUTC,trip_list[j,]$DatetimeUTC, units="hours")))
+   w[w$tripIDnight==trip_list$tripIDnight[j] & !is.na(w$tripIDnight),"return_hrs"] <- return_time
+ }}
+
+w$return_hrs <- round(w$return_hrs,digits = 2)
 
 ### file with trips
 tt<-w[!is.na(w$tripIDnight) & w$isNearestPoint=="yes",]
