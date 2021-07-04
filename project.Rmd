@@ -14,8 +14,6 @@ library(tmap)
 library(sp)
 library(devtools)
 library(som)
-#install.packages("trajr")
-#install.packages("lme4")
 library(trajr)
 library(lme4)
 #install.packages("devtools")
@@ -215,13 +213,10 @@ for(j in 1:length(animals)){
         w[w$TierName==animals[j] & w$DatetimeUTC==n$DatetimeUTC,"start_dist"]<-"yes"
       }}}}}
 
-# Time window 
+# Creating trips for observing time window 
 w <- w %>% group_by(TierID, tripdate2) %>% mutate(isTrip= max(tripID_dist) != 'NA',
                                           tripIDnight = ifelse((hour < 9.1 | hour >= 17.9)&isTrip,
                                                               max(tripID_dist), NA)) %>% ungroup()
-
-
-# length(unique(w$tripIDnight)); table(w[!is.na(w$tripIDnight),]$isNearestPoint)
 
 #List with closest_distance to schreck for each trip
 trip_list <- w %>% 
@@ -234,11 +229,12 @@ head(data.frame(trip_list))
 
 # Overview data
 ```{r}
-### plot
+### plot: wild boars
 pa<-ggplot(w,aes(x=date,y=TierName))+geom_line()
 pa<-pa+ylab("animal ID")+scale_x_date(breaks = "4 month", minor_breaks = "1 month")+xlab("date")+theme_bw()
 pa
 
+#plot: scare devices
 ps<-ggplot(s[s$id %in% w$closest_schreck,],aes(y=id,yend=id,x=datum_on,xend=datum_off))+geom_segment()
 ps
 
@@ -502,10 +498,10 @@ wilcox.test(return_hrs~scary,data=ttt)
  meanreturn$upr<-meanreturn$return_hrs+meanreturn$SE
 
  pm<-ggplot(meanreturn,aes(y=return_hrs,x=TierName))+geom_point()
- pm<-pm+geom_errorbar(data=data.frame(meanreturn),aes(ymin=lwr,ymax=upr),width=0.4)+theme_bw()+xlab("Animal ID")+ylab("mean and SE of hours until return")
+ pm<-pm+geom_errorbar(data=data.frame(meanreturn),aes(ymin=lwr,ymax=upr),width=0.4)+theme_bw()+xlab("animal ID")+ylab("mean and SE of hours until return")
  
  ## boxplot
- ptt<-ggplot(tt,aes(y=return_hrs,x=TierName))+geom_boxplot()+theme_bw()
+ ptt<-ggplot(tt,aes(y=return_hrs,x=TierName))+geom_boxplot()+xlab("animal ID")+theme_bw()
  ptt
  
   ttt<-tt[!is.na(tt$scareEffect),] # create data.frame without NA
