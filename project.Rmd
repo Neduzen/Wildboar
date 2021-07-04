@@ -310,8 +310,8 @@ ggplot() +
 trips <- w %>% filter(!is.na(tripIDnight)) %>% group_by(tripIDnight)
 trips 
 
-wildboar_trip_scared <- data.frame(matrix(ncol = 21, nrow = 0))
-x <- c("id", "triptime0", "approachingRate", "approachingRateRelative",
+wildboar_trip_scared <- data.frame(matrix(ncol = 22, nrow = 0))
+x <- c("id", "TierName","triptime0", "approachingRate", "approachingRateRelative",
        "approachingRateAbsolute", "speed", "sinousity", "linedist", "acceleration", "speedDiff3", 
        "dist","E", "N","x", "y", "directionRelative",
        "closest_schreck", "tripIDnight", "DatetimeUTC", "hour", "day")
@@ -375,7 +375,7 @@ for (u in 1:length(unique(trips$tripIDnight)))
     # Select
     wildboar_trip_scared <- wildboar_trip_scared %>% 
       rbind(wildboar_trip %>% 
-              dplyr::select(id, triptime0, approachingRate, approachingRateRelative,
+              dplyr::select(id, TierName, triptime0, approachingRate, approachingRateRelative,
                             approachingRateAbsolute, speed, sinousity, linedist, acceleration, 
                             speedDiff3, dist, E, N, x, y, directionRelative, closest_schreck, tripIDnight, 
                             DatetimeUTC, hour, day))
@@ -396,8 +396,8 @@ wildboar_trip_scared <- wildboar_trip_scared %>% group_by(tripIDnight) %>%
       (max(speedDiff3, na.rm=TRUE)-min(speedDiff3, na.rm = TRUE)),
     approachingRateRelativeSlead = lead(approachingRateRelativeS),
     scareEffect = accelerationS - sinousityS - distanceS - lead(approachingRateRelativeS) + speedDiff3S,
-    scareEffectShow = ifelse(scareEffect<0, -0.1, scareEffect),
-    scary= scareEffect > 1.1,
+    scareEffectShow = ifelse(scareEffect < 0, -0.1, scareEffect),
+    scary= scareEffect > 1.4,
     scary= ifelse(is.na(scary), FALSE, scary),
     scary= ifelse(scary&lag(scary), FALSE, scary)) %>% 
   ungroup()
@@ -477,12 +477,14 @@ for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight)))
 }
 ```
 
-# Plot all found shrecks
+# Calculate noise exposition at scared data points and for trips.
 ```{r}
-wildboar_scared_schreck <- wildboar_scared %>% left_join(schreck_locations_ch, by=c("closest_schreck"="id")) 
+wildboar_scared_schreck <- wildboar_scared %>% 
+  left_join(schreck_locations_ch, by=c("closest_schreck"="id"))  %>% 
+  filter(datum_on < DatetimeUTC & datum_off > DatetimeUTC)
 
 wildboar_scared_schreck <- wildboar_scared_schreck %>% 
-  select(ausrichtung_dir, directionRelative, dist, lautstaerke, scareEffect, modus) %>% 
+  select(tripIDnight, DatetimeUTC, ausrichtung_dir, directionRelative, dist, lautstaerke, scareEffect, modus, day) %>% 
   mutate(sameDirection=ausrichtung_dir==directionRelative,
          #soundDistance=lautstaerke/dist,
          #schreckProbabily= soundDistance*(1+sameDirection)/ (50/50*2) * 100,
@@ -491,18 +493,78 @@ wildboar_scared_schreck <- wildboar_scared_schreck %>%
                                     ausrichtung_dir=='N'& directionRelative=='S' | 
                                     ausrichtung_dir=='W'& directionRelative=='E'| 
                                     ausrichtung_dir=='E'& directionRelative=='W', 
-                                  0.5*lautstaerke, 0.75*lautstaerke)),
-         soundDistance = volumeDir - abs(20 * log(1/dist, 10)),
+                                  lautstaerke-10, lautstaerke-5)),
+         soundDistance = volumeDir - abs(20 * log(1/(1.581*dist), 10)),
+         soundDistance = ifelse(day=="Tag", -20, soundDistance),
          schreckProbabily = soundDistance *100/40)
 
-plot(wildboar_scared_schreck$scareEffect, wildboar_scared_schreck$schreckProbabily)
+#plot(wildboar_scared_schreck$scareEffect, wildboar_scared_schreck$schreckProbabily)
 plot(wildboar_scared_schreck$scareEffect, wildboar_scared_schreck$soundDistance)
 
-wildboar_scared_schreck2 <- wildboar_scared_schreck %>% filter(scareEffect > 1.40)
-plot(wildboar_scared_schreck2$scareEffect, wildboar_scared_schreck2$soundDistance)
+#wildboar_scared_schreck2 <- wildboar_scared_schreck %>% filter(scareEffect > 1.40)
+wildboar_trips <- wildboar_trip_scared %>% group_by(tripIDnight) %>% 
+  filter(scareEffect == max(scareEffect, na.rm=TRUE)) %>% ungroup() %>% 
+  left_join(schreck_locations_ch, by=c("closest_schreck"="id"))  %>% 
+  filter(datum_on < DatetimeUTC & datum_off > DatetimeUTC)
+wildboar_trips <- wildboar_trips %>% 
+  select(id, tripIDnight, TierName, DatetimeUTC, scary, ausrichtung_dir, directionRelative, 
+         dist, lautstaerke, scareEffect, modus, day) %>% 
+  mutate(sameDirection=ausrichtung_dir==directionRelative,
+         #soundDistance=lautstaerke/dist,
+         #schreckProbabily= soundDistance*(1+sameDirection)/ (50/50*2) * 100,
+         volumeDir = ifelse(sameDirection, lautstaerke, 
+                           ifelse(ausrichtung_dir=='S' & directionRelative=='N' | 
+                                    ausrichtung_dir=='N' & directionRelative=='S' | 
+                                    ausrichtung_dir=='W' & directionRelative=='E'| 
+                                    ausrichtung_dir=='E' & directionRelative=='W', 
+                                  lautstaerke-10, lautstaerke-5)),
+         soundDistance = volumeDir - abs(20 * log(1/(1.581*dist), 10)),
+         soundDistance = ifelse(day=="Tag", -20, soundDistance),
+        scareSound= ifelse(soundDistance < 10, FALSE, scary))
+
+wildboar_trips$sum <- replicate(length(wildboar_trips$TierName), 1)
+wildboar_scared <- wildboar_scared %>% 
+  left_join(wildboar_trips %>% select(id, soundDistance, scareSound), by=c("id"="id"))
+wildboar_scared <- wildboar_scared %>% filter(scareSound)
+
+wildboar_trips2 <- wildboar_trip_scared  %>% 
+  left_join(schreck_locations_ch, by=c("closest_schreck"="id"))  %>% 
+  filter(datum_on < DatetimeUTC & datum_off > DatetimeUTC) %>% 
+  select(tripIDnight, TierName, DatetimeUTC, scary, ausrichtung_dir, directionRelative, 
+         dist, lautstaerke, scareEffect, modus, day) %>% 
+  mutate(sameDirection=ausrichtung_dir==directionRelative,
+         #soundDistance=lautstaerke/dist,
+         #schreckProbabily= soundDistance*(1+sameDirection)/ (50/50*2) * 100,
+         volumeDir = ifelse(sameDirection, lautstaerke, 
+                           ifelse(ausrichtung_dir=='S' & directionRelative=='N' | 
+                                    ausrichtung_dir=='N' & directionRelative=='S' | 
+                                    ausrichtung_dir=='W' & directionRelative=='E'| 
+                                    ausrichtung_dir=='E' & directionRelative=='W', 
+                                  lautstaerke-10, lautstaerke-5)),
+         soundDistance = volumeDir - abs(20 * log(1/(1.581*dist), 10)),
+         soundDistance = ifelse(day=="Tag", -20, soundDistance),
+         schreckProbabily = soundDistance *100/40) 
+wildboar_trips2 <- wildboar_trips2 %>% group_by(tripIDnight) %>% 
+  filter(soundDistance == max(soundDistance, na.rm=TRUE)) %>% ungroup() 
+wildboar_trips2$sum <- replicate(length(wildboar_trips2$TierName), 1)
 
 
-wildboar_scared
+plot(wildboar_trips2$scareEffect, wildboar_trips2$soundDistance)
+
+
+ggplot(data=wildboar_trips) + 
+    geom_bar(stat="identity", aes(x=TierName, y=sum),
+             fill = "grey", size=1.3) +
+    geom_bar(data = wildboar_trips2 %>% filter(soundDistance > 20), stat="identity", aes(x=TierName, y= sum),
+             fill = "#ff9999", size=1.3) +
+    geom_bar(data = wildboar_trips %>% filter(scary), stat="identity", aes(x=TierName, y=sum),
+             fill = "#e83c3c", size=1.3) +
+  geom_bar(data = wildboar_trips %>% filter(soundDistance > 10 & scary), stat="identity", aes(x=TierName, y= sum),
+             fill = "darkred", size=1.3) +
+    xlab("Wild boar animal") + 
+    ylab("Amount of trips")
+
+wildboar_trips %>% filter(soundDistance > 20 & scary)
 schreck_locations_ch
 ```
 
