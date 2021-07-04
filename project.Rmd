@@ -423,6 +423,7 @@ w <- w %>% left_join(wildboar_trip_scared_True %>% ungroup() %>%
 # Amount of scared trips
 unique(wildboar_trip_scared$tripIDnight)
 unique(wildboar_trip_scared_True$tripIDnight)
+length(unique(wildboar_trip_scared_True$tripIDnight))
 
 for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight))) 
 {
@@ -479,15 +480,14 @@ for (u in 1:length(unique(wildboar_trip_scared_True$tripIDnight)))
 
 # Calculate noise exposition at scared data points and for trips.
 ```{r}
+# Get scared points and calculate sound volume
 wildboar_scared_schreck <- wildboar_scared %>% 
   left_join(schreck_locations_ch, by=c("closest_schreck"="id"))  %>% 
   filter(datum_on < DatetimeUTC & datum_off > DatetimeUTC)
 
 wildboar_scared_schreck <- wildboar_scared_schreck %>% 
-  select(tripIDnight, DatetimeUTC, ausrichtung_dir, directionRelative, dist, lautstaerke, scareEffect, modus, day) %>% 
+  select(id, tripIDnight, TierName, DatetimeUTC, ausrichtung_dir, directionRelative, dist, lautstaerke, scareEffect, modus, day) %>% 
   mutate(sameDirection=ausrichtung_dir==directionRelative,
-         #soundDistance=lautstaerke/dist,
-         #schreckProbabily= soundDistance*(1+sameDirection)/ (50/50*2) * 100,
          volumeDir = ifelse(sameDirection, lautstaerke, 
                            ifelse(ausrichtung_dir=='S'&directionRelative=='N' | 
                                     ausrichtung_dir=='N'& directionRelative=='S' | 
@@ -498,20 +498,18 @@ wildboar_scared_schreck <- wildboar_scared_schreck %>%
          soundDistance = ifelse(day=="Tag", -20, soundDistance),
          schreckProbabily = soundDistance *100/40)
 
-#plot(wildboar_scared_schreck$scareEffect, wildboar_scared_schreck$schreckProbabily)
 plot(wildboar_scared_schreck$scareEffect, wildboar_scared_schreck$soundDistance)
 
-#wildboar_scared_schreck2 <- wildboar_scared_schreck %>% filter(scareEffect > 1.40)
+# Get scared trips and calculate sound volume 
 wildboar_trips <- wildboar_trip_scared %>% group_by(tripIDnight) %>% 
   filter(scareEffect == max(scareEffect, na.rm=TRUE)) %>% ungroup() %>% 
   left_join(schreck_locations_ch, by=c("closest_schreck"="id"))  %>% 
   filter(datum_on < DatetimeUTC & datum_off > DatetimeUTC)
+
 wildboar_trips <- wildboar_trips %>% 
   select(id, tripIDnight, TierName, DatetimeUTC, scary, ausrichtung_dir, directionRelative, 
          dist, lautstaerke, scareEffect, modus, day) %>% 
   mutate(sameDirection=ausrichtung_dir==directionRelative,
-         #soundDistance=lautstaerke/dist,
-         #schreckProbabily= soundDistance*(1+sameDirection)/ (50/50*2) * 100,
          volumeDir = ifelse(sameDirection, lautstaerke, 
                            ifelse(ausrichtung_dir=='S' & directionRelative=='N' | 
                                     ausrichtung_dir=='N' & directionRelative=='S' | 
@@ -523,18 +521,19 @@ wildboar_trips <- wildboar_trips %>%
         scareSound= ifelse(soundDistance < 10, FALSE, scary))
 
 wildboar_trips$sum <- replicate(length(wildboar_trips$TierName), 1)
-wildboar_scared <- wildboar_scared %>% 
-  left_join(wildboar_trips %>% select(id, soundDistance, scareSound), by=c("id"="id"))
-wildboar_scared <- wildboar_scared %>% filter(scareSound)
 
+# Filter scare effect trips by scare sound
+wildboar_scared2 <- wildboar_scared %>% 
+  left_join(wildboar_trips %>% select(id, soundDistance, scareSound), by=c("id"="id"))
+wildboar_scared2 <- wildboar_scared2 %>% filter(scareSound)
+
+# Get scared trips and calculate sound volume, select most intense sound point per trip
 wildboar_trips2 <- wildboar_trip_scared  %>% 
   left_join(schreck_locations_ch, by=c("closest_schreck"="id"))  %>% 
   filter(datum_on < DatetimeUTC & datum_off > DatetimeUTC) %>% 
   select(tripIDnight, TierName, DatetimeUTC, scary, ausrichtung_dir, directionRelative, 
          dist, lautstaerke, scareEffect, modus, day) %>% 
   mutate(sameDirection=ausrichtung_dir==directionRelative,
-         #soundDistance=lautstaerke/dist,
-         #schreckProbabily= soundDistance*(1+sameDirection)/ (50/50*2) * 100,
          volumeDir = ifelse(sameDirection, lautstaerke, 
                            ifelse(ausrichtung_dir=='S' & directionRelative=='N' | 
                                     ausrichtung_dir=='N' & directionRelative=='S' | 
